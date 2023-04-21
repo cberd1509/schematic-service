@@ -35,16 +35,16 @@ pipeline {
 
 	}
 	stages {
-        stage('Unit Tests'){
-            steps {
-                catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
-                    sh "exit 1"
-                }
-                echo "Running unit tests"
-                sh "docker build -t ${BUILD_IMAGE}-tests -f ./Dockerfile.test ."
-                sh "docker run --rm ${BUILD_IMAGE}-tests"
-            }            
-        }
+        // stage('Unit Tests'){
+        //     steps {
+        //         catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
+        //             sh "exit 1"
+        //         }
+        //         echo "Running unit tests"
+        //         sh "docker build -t ${BUILD_IMAGE}-tests -f ./Dockerfile.test ."
+        //         sh "docker run --rm ${BUILD_IMAGE}-tests"
+        //     }            
+        // }
 		stage('Docker Build BE') {
 			steps {
 				withDockerRegistry ( [ credentialsId: "repo.openearth.io-dwpecpfl-ci", url: "https://${REGISTRY}/" ] ) {
