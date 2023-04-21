@@ -26,6 +26,7 @@ import {
   Assembly,
   Perforation,
   Fluid,
+  Log,
 } from '../interfaces/WellSchematicData';
 import { SchematicProvider } from './SchematicProvider';
 
@@ -104,6 +105,10 @@ export class ActualSchematicProvider extends SchematicProvider {
 
     wellSchematic.Lithology = {
       Formation: await this.GetLithology(body),
+    };
+
+    wellSchematic.Logs = {
+      Log: await this.GetLogs(body),
     };
 
     //Initialize Path Dependant Properties
@@ -1933,5 +1938,36 @@ export class ActualSchematicProvider extends SchematicProvider {
       .getRawManyNormalized();
 
     return annularFluids;
+  }
+
+  async GetLogs(body: WellSchematicQueryDTO){
+
+    const logsRaw = await this.dbConnection
+      .createQueryBuilder()
+      .from('DM_LOG_INTERVAL', null)
+      .leftJoin('DM_LOG', 'DM_LOG', 'DM_LOG_INTERVAL.log_id= DM_LOG.log_id')
+      .leftJoin('DM_LOG_DESC', 'DM_LOG_DESC', 'DM_LOG.log_id =DM_LOG_DESC.log_id')
+      .leftJoin('PL_LOG_INTERVAL_EXT', 'PL_LOG_INTERVAL_EXT', 'PL_LOG_INTERVAL_EXT.log_interval_id = DM_LOG_INTERVAL.log_interval_id')
+      .where('DM_LOG_INTERVAL.well_id = :well_id', { well_id: body.well_id })
+      .andWhere('DM_LOG_INTERVAL.wellbore_id = :wellbore_id', {
+        wellbore_id: body.wellbore_id,
+      })
+      .select(
+        'DM_LOG_INTERVAL.*, DM_LOG.reason, DM_LOG_DESC.comments, PL_LOG_INTERVAL_EXT.assembly_name',
+      ).getRawManyNormalized();
+
+    const logs = logsRaw.map((log) => {
+      return {
+        log_date: log.log_date,
+        service: log.service,
+        md_top: log.md_top,
+        md_base: log.md_base,
+        reason: log.reason,
+        assembly_name: log.assembly_name,
+        comments: JSON.stringify(log.comments),
+      } as Log;
+    });
+
+    return logs;
   }
 }

@@ -1,11 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { Design } from '../interfaces/WellSchematicData';
+import { Injectable, Logger, Scope } from '@nestjs/common';
+import { BarrierData, Design } from '../interfaces/WellSchematicData';
 import { DataSource } from 'typeorm';
 import { WellSchematicQueryDTO } from '../interfaces/DTO/WellSchematicQueryDTO';
 
-@Injectable()
+@Injectable({ scope: Scope.REQUEST })
 export class SchematicHelper {
   private readonly logger = new Logger(SchematicHelper.name);
+  barriersMap: Map<string, BarrierData[]>;
 
   constructor(private dataSource: DataSource) {}
 
@@ -48,6 +49,166 @@ export class SchematicHelper {
     }
   }
 
+  async getAllBarriersWithElements(body: WellSchematicQueryDTO) {
+    const elements = await this.dataSource
+      .createQueryBuilder()
+      .from('CD_BARRIER_DIAGRAM_T', 'CBD')
+      .innerJoin(
+        'CD_BARRIER_ENVELOPE_T',
+        'CBE',
+        'CBD.WELL_ID = CBE.WELL_ID AND CBD.WELLBORE_ID = CBE.WELLBORE_ID AND CBD.SCENARIO_ID = CBE.SCENARIO_ID AND CBD.BARRIER_DIAGRAM_ID = CBE.BARRIER_DIAGRAM_ID',
+      )
+      .innerJoin(
+        'CD_BARRIER_ELEMENT_T',
+        'CBEL',
+        'CBE.WELL_ID = CBEL.WELL_ID AND CBE.WELLBORE_ID = CBEL.WELLBORE_ID AND CBE.SCENARIO_ID = CBEL.SCENARIO_ID AND CBE.BARRIER_ENVELOPE_ID = CBEL.BARRIER_ENVELOPE_ID AND CBE.BARRIER_DIAGRAM_ID = CBEL.BARRIER_DIAGRAM_ID',
+      )
+      .where('CBD.WELL_ID = :well_id', { well_id: body.well_id })
+      .andWhere('CBD.WELLBORE_ID = :wellbore_id', {
+        wellbore_id: body.wellbore_id,
+      })
+      .andWhere('CBD.SCENARIO_ID = :scenario_id', {
+        scenario_id: body.scenario_id,
+      })
+      .select([
+        'CBE.name as barrier_id',
+        'CBEL.ref_id',
+        'CBEL.element_type as type',
+        'CBEL.barrier_envelope_id',
+        'CBEL.barrier_diagram_id',
+        'CBEL.barrier_element_id',
+      ])
+      .andWhere('CBD.diagram_date = :diagram_date', {
+        diagram_date: body.schematic_date,
+      })
+      .getRawManyNormalized();
+
+    for (let element of elements) {
+      const elementHistory = await this.dataSource
+        .createQueryBuilder()
+        .from('CD_BARRIER_ENV_TEST_LINK_T', 'CBETESTLINK')
+        .where('CBETESTLINK.BARRIER_ENVELOPE_ID = :barrier_envelope_id', {
+          barrier_envelope_id: element.barrier_envelope_id,
+        })
+        .andWhere('CBETESTLINK.BARRIER_DIAGRAM_ID = :barrier_diagram_id', {
+          barrier_diagram_id: element.barrier_diagram_id,
+        })
+        .andWhere('CBETESTLINK.BARRIER_ELEMENT_ID = :barrier_element_id', {
+          barrier_element_id: element.barrier_element_id,
+        })
+        .orderBy('CBETESTLINK.LAST_TEST_DATE', 'DESC')
+        .getRawManyNormalized();
+
+      let lastElementEvaluation;
+      if (elementHistory.length === 0) lastElementEvaluation = {};
+      else lastElementEvaluation = elementHistory[0];
+
+      let lastEnvelopeEvaluation: any = {};
+
+      if (elementHistory.length !== 0) {
+        lastEnvelopeEvaluation = await this.dataSource
+          .createQueryBuilder()
+          .from('CD_BARRIER_ENVELOPE_TEST_T', 'CBETEST')
+          .where('CBETEST.BARRIER_ENVELOPE_ID = :barrier_envelope_id', {
+            barrier_envelope_id: element.barrier_envelope_id,
+          })
+          .andWhere('CBETEST.BARRIER_DIAGRAM_ID = :barrier_diagram_id', {
+            barrier_diagram_id: element.barrier_diagram_id,
+          })
+          .andWhere(
+            'CBETEST.BARRIER_ENVELOPE_TEST_ID = :barrier_envelope_test_id',
+            {
+              barrier_envelope_test_id:
+                lastElementEvaluation.barrier_envelope_test_id,
+            },
+          )
+          .orderBy('CBETEST.LAST_TEST_DATE', 'DESC')
+          .getRawOneNormalized();
+      }
+
+      element = {
+        ...element,
+        status: lastElementEvaluation.status,
+        details: lastElementEvaluation.details,
+        component_ovality: lastElementEvaluation.component_ovality,
+        component_wearing: lastElementEvaluation.component_wearing,
+        last_test_date: lastElementEvaluation.last_test_date,
+        create_user: lastEnvelopeEvaluation.create_user,
+        elementHistory: [],
+      };
+    }
+
+    return elements;
+  }
+
+  /**
+   * Returns all the barriers for a given diagram
+   * @param body Query Params
+   */
+  async getAllBarriers(body: WellSchematicQueryDTO) {
+    if (this.barriersMap) {
+      return this.barriersMap;
+    }
+
+    this.barriersMap = new Map<string, BarrierData[]>();
+
+    const barriersQuery = this.dataSource
+      .createQueryBuilder()
+      .from('CD_BARRIER_DIAGRAM_T', 'CBD')
+      .innerJoin(
+        'CD_BARRIER_ENVELOPE_T',
+        'CBE',
+        'CBD.BARRIER_DIAGRAM_ID = CBE.BARRIER_DIAGRAM_ID AND CBD.WELL_ID = CBE.WELL_ID AND CBD.WELLBORE_ID = CBE.WELLBORE_ID AND CBD.SCENARIO_ID = CBE.SCENARIO_ID',
+      )
+      .innerJoin(
+        'CD_BARRIER_ELEMENT_T',
+        'CBEL',
+        'CBE.BARRIER_ENVELOPE_ID = CBEL.BARRIER_ENVELOPE_ID AND CBE.WELL_ID = CBEL.WELL_ID AND CBE.WELLBORE_ID = CBEL.WELLBORE_ID AND CBE.SCENARIO_ID = CBEL.SCENARIO_ID AND CBEL.BARRIER_DIAGRAM_ID = CBE.BARRIER_DIAGRAM_ID',
+      )
+      .where({
+        WELL_ID: body.well_id,
+        WELLBORE_ID: body.wellbore_id,
+        SCENARIO_ID: body.scenario_id,
+      })
+      //.andWhere('CBEL.REF_ID = :ref_id', { ref_id })
+      .select(['CBE.name as barrier_name', 'CBEL.*']);
+
+    if (body.schematic_date) {
+      barriersQuery.andWhere('CBD.diagram_date = :schematic_date', {
+        schematic_date: body.schematic_date,
+      });
+    }
+
+    const elementBarriers = await barriersQuery.getRawManyNormalized();
+
+    // Map elements to array items
+    elementBarriers.forEach((element) => {
+      const mapKey = `${element.ref_id} - ${body.schematic_date}`;
+      if (this.barriersMap.has(mapKey)) {
+        this.barriersMap.get(mapKey).push(element);
+      } else {
+        this.barriersMap.set(mapKey, [element]);
+      }
+    });
+
+    // Return elementBarriers
+    return this.barriersMap;
+  }
+
+  async getBarrierDiagrams(body: WellSchematicQueryDTO) {
+    return this.dataSource
+      .createQueryBuilder()
+      .from('CD_BARRIER_DIAGRAM_T', 'CBD')
+      .where({
+        WELL_ID: body.well_id,
+        WELLBORE_ID: body.wellbore_id,
+        SCENARIO_ID: body.scenario_id,
+      })
+      .select(['CBD.*'])
+      .orderBy('CBD.diagram_date', 'ASC')
+      .getRawManyNormalized();
+  }
+
   /**
    * For a given element, returns the list of barriers that are associated with it
    * @param well_id
@@ -65,35 +226,17 @@ export class SchematicHelper {
     ref_id: string,
   ): Promise<any[]> {
     this.logger.log('Getting element barriers data ' + ref_id);
+
     try {
-      const barriersQuery = this.dataSource
-        .createQueryBuilder()
-        .from('CD_BARRIER_DIAGRAM_T', 'CBD')
-        .innerJoin(
-          'CD_BARRIER_ENVELOPE_T',
-          'CBE',
-          'CBD.BARRIER_DIAGRAM_ID = CBE.BARRIER_DIAGRAM_ID AND CBD.WELL_ID = CBE.WELL_ID AND CBD.WELLBORE_ID = CBE.WELLBORE_ID AND CBD.SCENARIO_ID = CBE.SCENARIO_ID',
-        )
-        .innerJoin(
-          'CD_BARRIER_ELEMENT_T',
-          'CBEL',
-          'CBE.BARRIER_ENVELOPE_ID = CBEL.BARRIER_ENVELOPE_ID AND CBE.WELL_ID = CBEL.WELL_ID AND CBE.WELLBORE_ID = CBEL.WELLBORE_ID AND CBE.SCENARIO_ID = CBEL.SCENARIO_ID AND CBEL.BARRIER_DIAGRAM_ID = CBE.BARRIER_DIAGRAM_ID',
-        )
-        .where({
-          WELL_ID: well_id,
-          WELLBORE_ID: wellbore_id,
-          SCENARIO_ID: scenario_id,
-        })
-        .andWhere('CBEL.REF_ID = :ref_id', { ref_id })
-        .select(['CBE.name as barrier_name', 'CBEL.*']);
+      const mapKey = `${ref_id} - ${schematic_date}`;
+      const barriersMap = await this.getAllBarriers({
+        well_id,
+        wellbore_id,
+        scenario_id,
+        schematic_date,
+      });
 
-      if (schematic_date) {
-        barriersQuery.andWhere('CBD.diagram_date = :schematic_date', {
-          schematic_date,
-        });
-      }
-
-      const elementBarriers = await barriersQuery.getRawManyNormalized();
+      const elementBarriers = barriersMap.get(mapKey);
 
       if (!elementBarriers) {
         this.logger.warn('No element barriers data found');

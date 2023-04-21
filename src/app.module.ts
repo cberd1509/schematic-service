@@ -6,7 +6,8 @@ import { DesignSchematicProvider } from './common/providers/design-schematic-pro
 import { SchematicHelper } from './common/providers/schematic-helper';
 import { WellSchematicController } from './well-schematic/well-schematic.controller';
 import { WellSchematicService } from './well-schematic/well-schematic.service';
-import './common/extensions/SelectQueryBuilderExtension'  
+import { AnalysisDataService } from './analysis-data/analysis-data.service';
+import './common/extensions/SelectQueryBuilderExtension';
 
 @Module({
   imports: [
@@ -20,16 +21,18 @@ import './common/extensions/SelectQueryBuilderExtension'
       serviceName: process.env.DB_DATABASE,
       database: process.env.DB_DATABASE,
       entities: [],
-      synchronize: false
+      synchronize: false,
     }),
   ],
   controllers: [WellSchematicController],
-  providers: [WellSchematicService,
+  providers: [
+    WellSchematicService,
 
-//Logic providers
-ActualSchematicProvider,
-DesignSchematicProvider,
-SchematicHelper,
-],
+    //Logic providers
+    ActualSchematicProvider,
+    DesignSchematicProvider,
+    SchematicHelper,
+    AnalysisDataService,
+  ],
 })
 export class AppModule {}

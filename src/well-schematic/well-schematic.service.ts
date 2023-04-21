@@ -50,4 +50,12 @@ export class WellSchematicService {
       });
     }
   }
+
+  async getBarriers(body: WellSchematicQueryDTO){
+    return this.schematicHelper.getAllBarriersWithElements(body);
+  }
+
+  async getBarrierDiagrams(body: WellSchematicQueryDTO){
+    return this.schematicHelper.getBarrierDiagrams(body);
+  }
 }
