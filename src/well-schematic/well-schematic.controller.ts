@@ -12,7 +12,7 @@ import { WellSchematicService } from './well-schematic.service';
 import * as moment from 'moment';
 import { AnalysisDataService } from '../analysis-data/analysis-data.service';
 
-@Controller('well-schematic')
+@Controller('well-schematic-data')
 export class WellSchematicController {
   private readonly logger = new Logger(WellSchematicController.name);
 
