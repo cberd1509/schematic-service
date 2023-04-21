@@ -17,8 +17,17 @@ import {
   AnnulusLatestTestData,
   AnnulustestComponentData,
   SurveyStation,
+  HoleSectionComponent,
+  IntegrityTest,
+  CasingComponent,
+  Casing,
+  AssemblyComponent,
+  CementStage,
+  Assembly,
+  Perforation,
+  Fluid,
 } from '../interfaces/WellSchematicData';
-import { SchematicProvider } from '../SchematicProvider';
+import { SchematicProvider } from './SchematicProvider';
 
 export class ActualSchematicProvider extends SchematicProvider {
   private readonly logger = new Logger(ActualSchematicProvider.name);
@@ -89,21 +98,72 @@ export class ActualSchematicProvider extends SchematicProvider {
       Station: await this.GetSurveyStations(body),
     };
 
-    //Initialize Path Dependant Properties
+    wellSchematic.Catalogs = {
+      Catalog: await this.schematicHelper.getCatalogs(), //TODO: This must be migrated to another call. For compatibility purposes we will fetch them here
+    };
+
     wellSchematic.Lithology = {
-      Formation: [],
+      Formation: await this.GetLithology(body),
+    };
+
+    //Initialize Path Dependant Properties
+
+    wellSchematic.HoleSections = {
+      HoleSection: [],
+    };
+
+    wellSchematic.Assemblies = {
+      Assembly: [],
+    };
+
+    wellSchematic.Casings = {
+      Casing: [],
+    };
+
+    wellSchematic.CementJobs = {
+      CementStage: [],
+    };
+
+    wellSchematic.Perforations = {
+      Perforation: [],
     };
 
     //Fore each of the wellbores, get the properties and append them to initialized properties
-    for (const wellbore of wellborePathTree) {
-      const isLastWellbore =
-        wellborePathTree.indexOf(wellbore) === wellborePathTree.length - 1;
+    for (const [index, wellbore] of wellborePathTree.entries()) {
+      const nextWellbore = wellborePathTree[index + 1] || undefined;
 
-      wellSchematic.Lithology.Formation = [
-        ...wellSchematic.Lithology.Formation,
-        ...(await this.GetLithology(body, wellbore, isLastWellbore)),
+      wellSchematic.HoleSections.HoleSection = [
+        ...wellSchematic.HoleSections.HoleSection,
+        ...(await this.GetHoleSections(body, wellbore, nextWellbore)),
+      ];
+
+      wellSchematic.Casings.Casing = [
+        ...wellSchematic.Casings.Casing,
+        ...(await this.GetCasings(body, wellbore, nextWellbore)),
+      ];
+
+      wellSchematic.CementJobs.CementStage = [
+        ...wellSchematic.CementJobs.CementStage,
+        ...(await this.GetCementJobs(body, wellbore, nextWellbore)),
+      ];
+
+      wellSchematic.Assemblies.Assembly = [
+        ...wellSchematic.Assemblies.Assembly,
+        ...(await this.GetAssemblies(body, wellbore, nextWellbore)),
+      ];
+
+      wellSchematic.Perforations.Perforation = [
+        ...wellSchematic.Perforations.Perforation,
+        ...(await this.GetPerforations(body, wellbore, nextWellbore)),
       ];
     }
+
+    //Add Fluid data at the end as it requires data from the full schematic
+
+    wellSchematic.Fluids = {
+      Fluid: await this.GetFluids(body, wellSchematic),
+    };
+
     return wellSchematic;
   }
 
@@ -151,23 +211,28 @@ export class ActualSchematicProvider extends SchematicProvider {
   async GetWellheadAnnulusPressureData({
     well_id,
   }: WellSchematicQueryDTO): Promise<WellheadAnnularPressure[]> {
-    const rawAnnulusPressuresData = await this.dbConnection
-      .createQueryBuilder()
-      .from('PL_WELLHEAD_ANNULAR_PRES', null)
-      .where('WELL_ID = :wellid', { wellid: well_id })
-      .getRawManyNormalized();
+    try {
+      const rawAnnulusPressuresData = await this.dbConnection
+        .createQueryBuilder()
+        .from('PL_WELLHEAD_ANNULAR_PRES', null)
+        .where('WELL_ID = :wellid', { wellid: well_id })
+        .getRawManyNormalized();
 
-    const annulusPressureData: WellheadAnnularPressure[] = [];
-    for (const annularPressure of rawAnnulusPressuresData) {
-      const pressReliefData: WellheadPressureRelief[] =
-        await this.GetPressureReliefData(well_id, annularPressure);
+      const annulusPressureData: WellheadAnnularPressure[] = [];
+      for (const annularPressure of rawAnnulusPressuresData) {
+        const pressReliefData: WellheadPressureRelief[] =
+          await this.GetPressureReliefData(well_id, annularPressure);
 
-      annulusPressureData.push({
-        ...annularPressure,
-        PressureRelief: pressReliefData,
-      });
+        annulusPressureData.push({
+          ...annularPressure,
+          PressureRelief: pressReliefData,
+        });
+      }
+      return annulusPressureData;
+    } catch (err) {
+      this.logger.error(err);
+      return [];
     }
-    return annulusPressureData;
   }
 
   /**
@@ -180,23 +245,28 @@ export class ActualSchematicProvider extends SchematicProvider {
     well_id,
     press,
   ): Promise<WellheadPressureRelief[]> {
-    const rawPressureReliefData = await this.dbConnection
-      .createQueryBuilder()
-      .from('PL_WELLHEAD_PRESS_RELIEF', null)
-      .where(
-        `WELL_ID = :wellid
-          AND WELLHEAD_ID = :wellheadid
-          AND WELLHEAD_ANN_PRESS_ID = :annularpressureid
-          `,
-        {
-          wellid: well_id,
-          wellheadid: press.wellhead_id,
-          annularpressureid: press.wellhead_ann_press_id,
-        },
-      )
-      .getRawManyNormalized<WellheadPressureRelief>();
+    try {
+      const rawPressureReliefData = await this.dbConnection
+        .createQueryBuilder()
+        .from('PL_WELLHEAD_PRESS_RELIEF', null)
+        .where(
+          `WELL_ID = :wellid
+            AND WELLHEAD_ID = :wellheadid
+            AND WELLHEAD_ANN_PRESS_ID = :annularpressureid
+            `,
+          {
+            wellid: well_id,
+            wellheadid: press.wellhead_id,
+            annularpressureid: press.wellhead_ann_press_id,
+          },
+        )
+        .getRawManyNormalized<WellheadPressureRelief>();
 
-    return rawPressureReliefData;
+      return rawPressureReliefData;
+    } catch (err) {
+      this.logger.error(err);
+      return [];
+    }
   }
 
   /**
@@ -212,101 +282,105 @@ export class ActualSchematicProvider extends SchematicProvider {
   }: WellSchematicQueryDTO): Promise<WellheadComponent[]> {
     this.logger.log('Getting wellhead components');
 
-    const wellheadCompsQuery = this.dbConnection
-      .createQueryBuilder()
-      .from('CD_WELLHEAD', null)
-      .innerJoin(
-        'CD_WELLHEAD_COMP',
-        null,
-        'CD_WELLHEAD.wellhead_id = CD_WELLHEAD_COMP.wellhead_id AND CD_WELLHEAD.well_id = CD_WELLHEAD_COMP.well_id',
-      )
-      .leftJoin(
-        'PL_WELLHEAD_COMP_EXT',
-        null,
-        'PL_WELLHEAD_COMP_EXT.wellhead_comp_id = CD_WELLHEAD_COMP.wellhead_comp_id AND PL_WELLHEAD_COMP_EXT.wellhead_id = CD_WELLHEAD_COMP.wellhead_id',
-      )
-      .where('CD_WELLHEAD_COMP.well_id = :well_id', { well_id })
-      .andWhere('CD_WELLHEAD.scenario_id is null')
-      .andWhere('CD_WELLHEAD_COMP.install_date <= :schematic_date', {
-        schematic_date,
-      })
-      .andWhere(
-        new Brackets((qb) => {
-          qb.where('CD_WELLHEAD_COMP.removal_date is null').orWhere(
-            new Brackets((qb2) => {
-              qb2.where(
-                'CD_WELLHEAD_COMP.removal_date IS NOT NULL AND CD_WELLHEAD_COMP.removal_date > :schematic_date',
-                { schematic_date },
-              );
-            }),
-          );
-        }),
-      )
-      .orderBy('sequence_no', 'ASC')
-      .select([
-        'CD_WELLHEAD_COMP.*',
-        'PL_WELLHEAD_COMP_EXT.wellhead_section',
-        'PL_WELLHEAD_COMP_EXT.test_result',
-      ]);
+    try {
+      const wellheadCompsQuery = this.dbConnection
+        .createQueryBuilder()
+        .from('CD_WELLHEAD', null)
+        .innerJoin(
+          'CD_WELLHEAD_COMP',
+          null,
+          'CD_WELLHEAD.wellhead_id = CD_WELLHEAD_COMP.wellhead_id AND CD_WELLHEAD.well_id = CD_WELLHEAD_COMP.well_id',
+        )
+        .leftJoin(
+          'PL_WELLHEAD_COMP_EXT',
+          null,
+          'PL_WELLHEAD_COMP_EXT.wellhead_comp_id = CD_WELLHEAD_COMP.wellhead_comp_id AND PL_WELLHEAD_COMP_EXT.wellhead_id = CD_WELLHEAD_COMP.wellhead_id',
+        )
+        .where('CD_WELLHEAD_COMP.well_id = :well_id', { well_id })
+        .andWhere('CD_WELLHEAD.scenario_id is null')
+        .andWhere('CD_WELLHEAD_COMP.install_date <= :schematic_date', {
+          schematic_date,
+        })
+        .andWhere(
+          new Brackets((qb) => {
+            qb.where('CD_WELLHEAD_COMP.removal_date is null').orWhere(
+              new Brackets((qb2) => {
+                qb2.where(
+                  'CD_WELLHEAD_COMP.removal_date IS NOT NULL AND CD_WELLHEAD_COMP.removal_date > :schematic_date',
+                  { schematic_date },
+                );
+              }),
+            );
+          }),
+        )
+        .orderBy('sequence_no', 'ASC')
+        .select([
+          'CD_WELLHEAD_COMP.*',
+          'PL_WELLHEAD_COMP_EXT.wellhead_section',
+          'PL_WELLHEAD_COMP_EXT.test_result',
+        ]);
 
-    const wellheadCompsRawData: any =
-      await wellheadCompsQuery.getRawManyNormalized();
+      const wellheadCompsRawData: any =
+        await wellheadCompsQuery.getRawManyNormalized();
 
-    const wellheadComponents: WellheadComponent[] = [];
-    for (const wellheadComp of wellheadCompsRawData) {
-      const refId = `CdWellheadCompT/${wellheadComp.well_id}+${wellheadComp.event_id}+${wellheadComp.wellhead_id}+${wellheadComp.wellhead_comp_id}`;
-      const barriers = await this.schematicHelper.getElementBarriers(
-        well_id,
-        scenario_id,
-        wellbore_id,
-        schematic_date,
-        refId,
-      );
+      const wellheadComponents: WellheadComponent[] = [];
+      for (const wellheadComp of wellheadCompsRawData) {
+        const refId = `CdWellheadCompT/${wellheadComp.well_id}+${wellheadComp.event_id}+${wellheadComp.wellhead_id}+${wellheadComp.wellhead_comp_id}`;
+        const barriers = await this.schematicHelper.getElementBarriers(
+          well_id,
+          scenario_id,
+          wellbore_id,
+          schematic_date,
+          refId,
+        );
 
-      this.logger.log('Getting Wellhead Outlets for wellhead');
-      const outlets: WellheadOutlet[] = await this.GetWellheadCompOutlets(
-        schematic_date,
-        scenario_id,
-        wellbore_id,
-        wellheadComp,
-      );
+        this.logger.log('Getting Wellhead Outlets for wellhead');
+        const outlets: WellheadOutlet[] = await this.GetWellheadCompOutlets(
+          schematic_date,
+          scenario_id,
+          wellbore_id,
+          wellheadComp,
+        );
 
-      this.logger.log('Getting Wellhead Hangers for wellhead');
+        this.logger.log('Getting Wellhead Hangers for wellhead');
 
-      const hangers: WellheadHanger[] = await this.GetWellheadHangers(
-        wellheadComp,
-        well_id,
-        scenario_id,
-        wellbore_id,
-        schematic_date,
-      );
+        const hangers: WellheadHanger[] = await this.GetWellheadHangers(
+          wellheadComp,
+          well_id,
+          scenario_id,
+          wellbore_id,
+          schematic_date,
+        );
 
-      wellheadComponents.push({
-        ref_id: refId,
-        SectType: wellheadComp.sect_type_code,
-        CompType: wellheadComp.comp_type_code,
-        Manufacturer: wellheadComp.make,
-        Model: wellheadComp.model,
-        description: `(${wellheadComp.wellhead_section}) ${wellheadComp.sect_type_code} - ${wellheadComp.comp_type_code} - ${wellheadComp.make} - ${wellheadComp.model}`,
-        wellhead_section: wellheadComp.wellhead_section,
-        test_result: wellheadComp.test_result,
-        TopPresRating: wellheadComp.working_press_rating,
-        comments: wellheadComp.comments,
-        installDate: wellheadComp.install_date,
-        removalDate: wellheadComp.removal_date,
-        barrier_id: barriers.map((barrier) => barrier.barrier_name).join(','),
-        is_barrier_closed: false,
-        include_seals: false,
-        test_duration: wellheadComp.manufacture_method,
-        test_pressure: wellheadComp.connection_top_press_rating,
-        Outlet: outlets,
-        Hanger: hangers,
-        reference: null,
-        wellheadReference: null,
-      });
+        wellheadComponents.push({
+          ref_id: refId,
+          SectType: wellheadComp.sect_type_code,
+          CompType: wellheadComp.comp_type_code,
+          Manufacturer: wellheadComp.make,
+          Model: wellheadComp.model,
+          description: `(${wellheadComp.wellhead_section}) ${wellheadComp.sect_type_code} - ${wellheadComp.comp_type_code} - ${wellheadComp.make} - ${wellheadComp.model}`,
+          wellhead_section: wellheadComp.wellhead_section,
+          test_result: wellheadComp.test_result,
+          TopPresRating: wellheadComp.working_press_rating,
+          comments: wellheadComp.comments,
+          installDate: wellheadComp.install_date,
+          removalDate: wellheadComp.removal_date,
+          barrier_id: barriers.map((barrier) => barrier.barrier_name).join(','),
+          is_barrier_closed: false,
+          include_seals: false,
+          test_duration: wellheadComp.manufacture_method,
+          test_pressure: wellheadComp.connection_top_press_rating,
+          Outlet: outlets,
+          Hanger: hangers,
+          reference: null,
+          wellheadReference: null,
+        });
+      }
+
+      return wellheadComponents;
+    } catch (err) {
+      this.logger.error(err);
     }
-
-    return wellheadComponents;
   }
 
   /**
@@ -325,58 +399,63 @@ export class ActualSchematicProvider extends SchematicProvider {
     wellbore_id: string,
     schematic_date: Date,
   ): Promise<WellheadHanger[]> {
-    const rawHangersData = await this.dbConnection
-      .createQueryBuilder()
-      .from('CD_WELLHEAD_HANGER', 'WHCH')
-      .where(
-        `WELL_ID = :wellid
-                AND EVENT_ID = :eventid
-                AND WELLHEAD_ID = :wellheadid
-                AND WELLHEAD_COMP_ID = :wellheadcompid
-                `,
-        {
-          wellid: well_id,
-          eventid: item.event_id,
-          wellheadid: item.wellhead_id,
-          wellheadcompid: item.wellhead_comp_id,
-        },
-      )
-      .getRawManyNormalized();
+    try {
+      const rawHangersData = await this.dbConnection
+        .createQueryBuilder()
+        .from('CD_WELLHEAD_HANGER', 'WHCH')
+        .where(
+          `WELL_ID = :wellid
+                  AND EVENT_ID = :eventid
+                  AND WELLHEAD_ID = :wellheadid
+                  AND WELLHEAD_COMP_ID = :wellheadcompid
+                  `,
+          {
+            wellid: well_id,
+            eventid: item.event_id,
+            wellheadid: item.wellhead_id,
+            wellheadcompid: item.wellhead_comp_id,
+          },
+        )
+        .getRawManyNormalized();
 
-    const wellheadHangers: WellheadHanger[] = [];
-    for (const hangerItem of rawHangersData) {
-      if (!hangerItem.assembly_id) continue;
-      const refId = `CdWellheadHangerT/${item.well_id}+${item.event_id}+${item.wellhead_id}+${item.wellhead_comp_id}+${hangerItem.wellhead_hanger_id}`;
-      const hangerBarriers = await this.schematicHelper.getElementBarriers(
-        well_id,
-        scenario_id,
-        wellbore_id,
-        schematic_date,
-        refId,
-      );
+      const wellheadHangers: WellheadHanger[] = [];
+      for (const hangerItem of rawHangersData) {
+        if (!hangerItem.assembly_id) continue;
+        const refId = `CdWellheadHangerT/${item.well_id}+${item.event_id}+${item.wellhead_id}+${item.wellhead_comp_id}+${hangerItem.wellhead_hanger_id}`;
+        const hangerBarriers = await this.schematicHelper.getElementBarriers(
+          well_id,
+          scenario_id,
+          wellbore_id,
+          schematic_date,
+          refId,
+        );
 
-      wellheadHangers.push({
-        ref_id: refId,
-        CompType: hangerItem.comp_type_code,
-        SectType: 'HGR',
-        description:
-          hangerItem.model +
-          ' - ' +
-          hangerItem.hanger_size +
-          ' // ' +
-          hangerItem.comp_type_code,
-        Model: hangerItem.model,
-        Size: hangerItem.hanger_size,
-        barrier_id: hangerBarriers
-          .map((barrier) => barrier.barrier_name)
-          .join(','),
-        is_barrier_closed: true,
-        include_seals: true,
-        reference: '',
-      });
+        wellheadHangers.push({
+          ref_id: refId,
+          CompType: hangerItem.comp_type_code,
+          SectType: 'HGR',
+          description:
+            hangerItem.model +
+            ' - ' +
+            hangerItem.hanger_size +
+            ' // ' +
+            hangerItem.comp_type_code,
+          Model: hangerItem.model,
+          Size: hangerItem.hanger_size,
+          barrier_id: hangerBarriers
+            .map((barrier) => barrier.barrier_name)
+            .join(','),
+          is_barrier_closed: true,
+          include_seals: true,
+          reference: '',
+        });
+      }
+
+      return wellheadHangers;
+    } catch (err) {
+      this.logger.error(err);
+      return [];
     }
-
-    return wellheadHangers;
   }
 
   /**
@@ -465,11 +544,8 @@ export class ActualSchematicProvider extends SchematicProvider {
    */
   async GetLithology(
     queryData: WellSchematicQueryDTO,
-    wellbore: WellboreData,
-    isLastWellbore: boolean,
   ): Promise<LithologyFormation[]> {
-    const { well_id, scenario_id, schematic_date } = queryData;
-    const { wellbore_id, ko_md } = wellbore;
+    const { well_id, wellbore_id, scenario_id, schematic_date } = queryData;
 
     try {
       const lithologyQuery = this.dbConnection
@@ -504,10 +580,6 @@ export class ActualSchematicProvider extends SchematicProvider {
           { wellid: well_id, wellboreId: wellbore_id, scenarioId: scenario_id },
         )
         .orderBy('prognosed_md', 'ASC');
-
-      if (!isLastWellbore) {
-        lithologyQuery.andWhere('prognosed_md <= :md', { md: ko_md });
-      }
 
       const rawLithologyData = await lithologyQuery.getRawManyNormalized();
 
@@ -550,6 +622,7 @@ export class ActualSchematicProvider extends SchematicProvider {
           '. Error: ' +
           err,
       );
+      return [];
     }
   }
 
@@ -653,12 +726,12 @@ export class ActualSchematicProvider extends SchematicProvider {
         `${
           tableName === 'PL_WELLBORE_TEMP_GRAD' ? 'temperature' : 'pressure'
         } as value`,
+        'depth_tvd',
       ])
       .getRawManyNormalized<WellboreGradient>()
       .catch((err) => {
-        console.log(tableName);
         this.logger.error(
-          'An error ocurred while fetching gradient data for wellbore ' +
+          `An error ocurred while fetching gradient from table ${tableName} data for wellbore ` +
             body.wellbore_id +
             ' in well ' +
             body.well_id +
@@ -677,16 +750,7 @@ export class ActualSchematicProvider extends SchematicProvider {
    */
   async GetAnnulusData(body: WellSchematicQueryDTO) {
     try {
-      const barrierDiagram = await this.dbConnection
-        .createQueryBuilder()
-        .from('CD_BARRIER_DIAGRAM_T', 'CBD')
-        .where({
-          well_id: body.well_id,
-          wellbore_id: body.wellbore_id,
-          scenario_id: body.scenario_id,
-          diagram_date: body.schematic_date,
-        })
-        .getRawOneNormalized();
+      const barrierDiagram: any = await this.GetLatestBarrierDiagram(body);
 
       if (!barrierDiagram) {
         return [];
@@ -730,6 +794,34 @@ export class ActualSchematicProvider extends SchematicProvider {
     }
   }
 
+  async GetLatestBarrierDiagram(body: WellSchematicQueryDTO) {
+    try {
+      const barrierDiagram = await this.dbConnection
+        .createQueryBuilder()
+        .from('CD_BARRIER_DIAGRAM_T', 'CBD')
+        .where({
+          well_id: body.well_id,
+          wellbore_id: body.wellbore_id,
+          scenario_id: body.scenario_id,
+          diagram_date: body.schematic_date,
+        })
+        .getRawOneNormalized();
+
+      return barrierDiagram;
+    } catch (err) {
+      this.logger.error(
+        'An error ocurred while fetching barrier diagram data for wellbore ' +
+          body.wellbore_id +
+          ' in well ' +
+          body.well_id +
+          '. Error: ' +
+          err,
+        err,
+      );
+      return null;
+    }
+  }
+
   /**
    * Returns the latest test information for each annulus (Operative Conditions - MOP, MAWOP, MAASP -)
    * @param annulus
@@ -738,78 +830,112 @@ export class ActualSchematicProvider extends SchematicProvider {
   async GetAnnulusTests(
     annulus: AnnulusComponentData,
   ): Promise<AnnulusLatestTestData> {
-    const testData = await this.dbConnection
-      .createQueryBuilder()
-      .from('CD_ANNULUS_TEST_T', 'CAT')
-      .where({
-        well_id: annulus.well_id,
-        wellbore_id: annulus.wellbore_id,
-        scenario_id: annulus.scenario_id,
-        barrier_diagram_id: annulus.barrier_diagram_id,
-        annulus_element_id: annulus.annulus_element_id,
-      })
-      .getRawManyNormalized<AnnulustestComponentData>();
+    try {
+      const testData = await this.dbConnection
+        .createQueryBuilder()
+        .from('CD_ANNULUS_TEST_T', 'CAT')
+        .where({
+          well_id: annulus.well_id,
+          wellbore_id: annulus.wellbore_id,
+          scenario_id: annulus.scenario_id,
+          barrier_diagram_id: annulus.barrier_diagram_id,
+          annulus_element_id: annulus.annulus_element_id,
+        })
+        .getRawManyNormalized<AnnulustestComponentData>();
 
-    const mopData = testData.find((x) => x.test_type === 'MOP');
-    const mawopData = testData.find((x) => x.test_type === 'MAWOP');
-    const maaspData = testData.find((x) => x.test_type === 'MAASP');
+      const mopData = testData.find((x) => x.test_type === 'MOP');
+      const mawopData = testData.find((x) => x.test_type === 'MAWOP');
+      const maaspData = testData.find((x) => x.test_type === 'MAASP');
 
-    const annulusTestData: AnnulusLatestTestData = {
-      maasp_location: null,
-      maasp_value: null,
-      mawop_location: null,
-      mawop_value: null,
-      mop_value: null,
-    };
+      const annulusTestData: AnnulusLatestTestData = {
+        maasp_location: null,
+        maasp_value: null,
+        mawop_location: null,
+        mawop_value: null,
+        mop_value: null,
+      };
 
-    if (mopData) {
-      annulusTestData.mop_value = mopData.pressure;
+      if (mopData) {
+        annulusTestData.mop_value = mopData.pressure;
+      }
+
+      if (mawopData) {
+        annulusTestData.mawop_value = mawopData.pressure;
+        annulusTestData.mawop_location = mawopData.location;
+      }
+
+      if (mawopData) {
+        annulusTestData.maasp_value = maaspData.pressure;
+        annulusTestData.maasp_location = maaspData.location;
+      }
+
+      return annulusTestData;
+    } catch (err) {
+      this.logger.error(
+        'An error ocurred while fetching annulus test data for wellbore ' +
+          annulus.wellbore_id +
+          ' in well ' +
+          annulus.well_id +
+          '. Error: ' +
+          err,
+        err,
+      );
+      return {
+        maasp_location: null,
+        mawop_location: null,
+        maasp_value: null,
+        mawop_value: null,
+        mop_value: null,
+      };
     }
-
-    if (mawopData) {
-      annulusTestData.mawop_value = mawopData.pressure;
-      annulusTestData.mawop_location = mawopData.location;
-    }
-
-    if (mawopData) {
-      annulusTestData.maasp_value = maaspData.pressure;
-      annulusTestData.maasp_location = maaspData.location;
-    }
-
-    return annulusTestData;
   }
 
   /**
    * For a given wellbore, returns the survey stations
    * @param body
    */
-  async GetSurveyStations(body: WellSchematicQueryDTO) {
-    const scenarioData = await this.schematicHelper.getDesignData(
-      body.scenario_id,
-      body.well_id,
-      body.wellbore_id,
-    );
+  async GetSurveyStations(
+    body: WellSchematicQueryDTO,
+  ): Promise<SurveyStation[]> {
+    try {
+      const scenarioData = await this.schematicHelper.getDesignData(
+        body.scenario_id,
+        body.well_id,
+        body.wellbore_id,
+      );
 
-    const rawSurveyData = await this.dbConnection
-      .createQueryBuilder()
-      .from('CD_DEFINITIVE_SURVEY_STATION', 'DSS')
-      .where({
-        def_survey_header_id: scenarioData.def_survey_header_id,
-      })
-      .orderBy('md', 'ASC')
-      .getRawManyNormalized();
+      const rawSurveyData = await this.dbConnection
+        .createQueryBuilder()
+        .from('CD_DEFINITIVE_SURVEY_STATION', 'DSS')
+        .where({
+          def_survey_header_id: scenarioData.def_survey_header_id,
+        })
+        .orderBy('md', 'ASC')
+        .getRawManyNormalized();
 
-    return rawSurveyData.map(
-      (surveyStation) =>
-        ({
-          Md: surveyStation.md,
-          Inc: surveyStation.inclination,
-          Azi: surveyStation.azimuth,
-          Tvd: surveyStation.tvd,
-          Ns: surveyStation.offset_north,
-          Ew: surveyStation.offset_east,
-        } as SurveyStation),
-    );
+      return rawSurveyData.map(
+        (surveyStation) =>
+          ({
+            Md: surveyStation.md,
+            Inc: surveyStation.inclination,
+            Azi: surveyStation.azimuth,
+            Tvd: surveyStation.tvd,
+            Ns: surveyStation.offset_north,
+            Ew: surveyStation.offset_east,
+          } as SurveyStation),
+      );
+    } catch (err) {
+      this.logger.error(
+        'An error ocurred while fetching survey stations for wellbore ' +
+          body.wellbore_id +
+          ' in well ' +
+          body.well_id +
+          '. Error: ' +
+          err,
+        err,
+      );
+      return [];
+    }
   }
 
   /**
@@ -848,5 +974,964 @@ export class ActualSchematicProvider extends SchematicProvider {
       this.logger.error(err);
       return [];
     }
+  }
+
+  /**
+   * Returns the hole sections associated with a given wellbore
+   * @param queryData Query parameters
+   * @param wellbore Wellbore data
+   * @param isLastWellbore Flag that indicates if the wellbore is the last in the path
+   */
+  async GetHoleSections(
+    queryData: WellSchematicQueryDTO,
+    wellbore: WellboreData,
+    nextWellbore: WellboreData,
+  ): Promise<HoleSectionComponent[]> {
+    try {
+      this.logger.log(
+        'Fetching hole sections for wellbore ' + wellbore.wellbore_name,
+      );
+
+      const holeSectionsQuery = this.dbConnection
+        .createQueryBuilder()
+        .from('CD_HOLE_SECT_GROUP', 'HSG')
+        .where('HSG.WELL_ID = :wellid', { wellid: queryData.well_id })
+        .andWhere('HSG.WELLBORE_ID = :wellboreid', {
+          wellboreid: wellbore.wellbore_id,
+        })
+        .andWhere('HSG.PHASE = :phase', { phase: 'ACTUAL' })
+        .andWhere('HSG.DATE_SECT_START <= :date', {
+          date: queryData.schematic_date,
+        })
+        .orderBy('HSG.MD_HOLE_SECT_TOP', 'ASC');
+
+      if (nextWellbore) {
+        holeSectionsQuery.andWhere('md_hole_sect_top <= :md', {
+          md: nextWellbore.ko_md,
+        });
+      }
+
+      const rawHoleSections =
+        await holeSectionsQuery.getRawManyNormalized<any>();
+
+      const holeSections: HoleSectionComponent[] = [];
+      for (const holeSection of rawHoleSections) {
+        const refId = `CdHoleSectGroupT/${queryData.well_id}+${wellbore.wellbore_id}+${holeSection.hole_sect_group_id}`;
+        const integrityTests = await this.GetHoleSectionsIntegrityTests(
+          queryData,
+          holeSection.hole_sect_group_id,
+        );
+
+        if (nextWellbore) {
+          holeSection.md_hole_sect_base = Math.min(
+            holeSection.md_hole_sect_base,
+            nextWellbore.ko_md,
+          );
+        }
+
+        const holeSectionComp: HoleSectionComponent = {
+          ref_id: refId,
+          StartMD: holeSection.md_hole_sect_top,
+          Length: holeSection.md_hole_sect_base - holeSection.md_hole_sect_top,
+          Diameter: await this.schematicHelper.getMaxHoleSectionDiameter(
+            holeSection,
+          ),
+          dateSectEnd: holeSection.date_sect_end,
+          name: holeSection.hole_name,
+          reference: null,
+          IntegrityTest: integrityTests,
+        };
+
+        holeSections.push(holeSectionComp);
+      }
+
+      return holeSections;
+    } catch (err) {
+      this.logger.error(err);
+      return [];
+    }
+  }
+
+  /**
+   * Returns the integrity tests associated with a given hole section
+   * @param queryData
+   * @param hole_sect_group_id
+   * @returns
+   */
+  async GetHoleSectionsIntegrityTests(
+    queryData: WellSchematicQueryDTO,
+    hole_sect_group_id: string,
+  ): Promise<IntegrityTest[]> {
+    try {
+      this.logger.log(
+        'Fetching integrity tests for hole section group ' +
+          hole_sect_group_id +
+          ' in wellbore ' +
+          queryData.wellbore_id +
+          ' in well ' +
+          queryData.well_id +
+          '.',
+      );
+      return this.dbConnection
+        .createQueryBuilder()
+        .from('DM_WELLBORE_INTEG', 'WI')
+        .where('WI.WELL_ID = :wellid', { wellid: queryData.well_id })
+        .andWhere('WI.WELLBORE_ID = :wellboreid', {
+          wellboreid: queryData.wellbore_id,
+        })
+        .andWhere('WI.HOLE_SECT_GROUP_ID = :holesectgroupid', {
+          holesectgroupid: hole_sect_group_id,
+        })
+        .andWhere('WI.TEST_TYPE IS NOT NULL')
+        .getRawManyNormalized<IntegrityTest>();
+    } catch (err) {
+      this.logger.error(err);
+      return [];
+    }
+  }
+
+  /**
+   * Returns the casings associated for a given Wellbore
+   * @param queryData
+   * @param wellbore
+   * @param isLastWellbore
+   */
+  async GetCasings(
+    queryData: WellSchematicQueryDTO,
+    wellbore: WellboreData,
+    nextWellbore: WellboreData,
+  ): Promise<Casing[]> {
+    const activeAssembliesIds =
+      await this.schematicHelper.getActiveAssembliesOnDate({
+        ...queryData,
+        wellbore_id: wellbore.wellbore_id,
+      });
+
+    const rawCasingStringsQuery = this.dbConnection
+      .createQueryBuilder()
+      .from('CD_ASSEMBLY', 'CD_ASSEMBLY')
+      .where('CD_ASSEMBLY.WELL_ID = :wellid', { wellid: queryData.well_id })
+      .andWhere('CD_ASSEMBLY.WELLBORE_ID = :wellboreid', {
+        wellboreid: wellbore.wellbore_id,
+      })
+      .andWhere('CD_ASSEMBLY.PHASE = :phase', { phase: 'ACTUAL' })
+      .andWhere('CD_ASSEMBLY.CREATE_APP_ID = :createappid', {
+        createappid: 'OpenWells',
+      })
+      .andWhere('CD_ASSEMBLY.STRING_TYPE IN (:...stringtype)', {
+        stringtype: ['Casing', 'Liner'],
+      })
+      .andWhere('CD_ASSEMBLY.ASSEMBLY_ID IN (:...assemblyid)', {
+        assemblyid: activeAssembliesIds,
+      })
+      .orderBy('CD_ASSEMBLY.MD_ASSEMBLY_TOP', 'ASC')
+      .orderBy('CD_ASSEMBLY.MD_ASSEMBLY_BASE', 'ASC');
+
+    if (nextWellbore) {
+      rawCasingStringsQuery.andWhere('CD_ASSEMBLY.MD_ASSEMBLY_TOP <= :md', {
+        md: nextWellbore.ko_md,
+      });
+    }
+
+    const rawCasingStrings =
+      await rawCasingStringsQuery.getRawManyNormalized<any>();
+
+    const casingStrings: Casing[] = [];
+
+    for (const [index, casing] of rawCasingStrings.entries()) {
+      const refId = `CdAssemblyT/${casing.well_id}+${casing.wellbore_id}+${casing.assembly_id}`;
+
+      const barriers = await this.schematicHelper.getElementBarriers(
+        queryData.well_id,
+        queryData.scenario_id,
+        queryData.wellbore_id,
+        queryData.schematic_date,
+        refId,
+      );
+
+      const assemblyComponents: CasingComponent[] =
+        await this.GetCasingComponents(queryData, casing, nextWellbore);
+
+      if (nextWellbore) {
+        casing.md_assembly_base = Math.min(
+          casing.md_assembly_base,
+          nextWellbore.ko_md,
+        );
+        casing.tvd_assembly_base = Math.min(
+          casing.tvd_assembly_base,
+          nextWellbore.ko_tvd,
+        );
+      }
+
+      const casingString: Casing = {
+        ref_id: refId,
+        StringType: casing.string_type,
+        isCasing: casing.is_casing_liner === 'Y',
+        index: index,
+        mdAssemblyTop: casing.md_assembly_top,
+        mdAssemblyBase: casing.md_assembly_base,
+        assemblySize: casing.assembly_size,
+        name: casing.assembly_name,
+        description: casing.assembly_name,
+        AssemblyID: casing.assembly_id,
+        TvdAssemblyTop: casing.tvd_assembly_top,
+        TvdAssemblyBase: casing.tvd_assembly_base,
+        Liner: casing.susp_point,
+        Component: assemblyComponents,
+        Umbilical: [],
+        Jewellery: [],
+        Barrier: barriers.map((barrier) => {
+          return {
+            barrier_id: barrier.barrier_name,
+            from: casing.md_assembly_top,
+            to: casing.md_assembly_base,
+          };
+        }),
+        reference: null,
+      };
+      casingStrings.push(casingString);
+    }
+    return casingStrings;
+  }
+
+  /**
+   * For a given Casing, returns its components
+   * @param queryData
+   * @param casing
+   * @returns
+   */
+  async GetCasingComponents(
+    queryData: WellSchematicQueryDTO,
+    casing: any,
+    nextWellbore: WellboreData,
+  ): Promise<CasingComponent[]> {
+    try {
+      const rawAssemblyComponentsQuery = this.dbConnection
+        .createQueryBuilder()
+        .from('CD_ASSEMBLY_COMP', 'CD_ASSEMBLY_COMP')
+        .where('CD_ASSEMBLY_COMP.WELL_ID = :wellid', {
+          wellid: queryData.well_id,
+        })
+        .andWhere('CD_ASSEMBLY_COMP.WELLBORE_ID = :wellboreid', {
+          wellboreid: casing.wellbore_id,
+        })
+        .andWhere('CD_ASSEMBLY_COMP.ASSEMBLY_ID = :assemblyid', {
+          assemblyid: casing.assembly_id,
+        })
+        .orderBy('CD_ASSEMBLY_COMP.SEQUENCE_NO', 'ASC');
+
+      if (nextWellbore) {
+        rawAssemblyComponentsQuery.andWhere('CD_ASSEMBLY_COMP.md_top <= :md', {
+          md: nextWellbore.ko_md,
+        });
+      }
+
+      const rawAssemblyComponents =
+        await rawAssemblyComponentsQuery.getRawManyNormalized<any>();
+
+      const assemblyComponents: CasingComponent[] = [];
+      for (const component of rawAssemblyComponents) {
+        const refId = `CdAssemblyComp_Cas/${casing.well_id}+${casing.wellbore_id}+${casing.assembly_id}+${component.assembly_comp_id}`;
+
+        const barriers = await this.schematicHelper.getElementBarriers(
+          queryData.well_id,
+          queryData.scenario_id,
+          queryData.wellbore_id,
+          queryData.schematic_date,
+          refId,
+        );
+
+        if (nextWellbore) {
+          component.md_base = Math.min(component.md_base, nextWellbore.ko_md);
+        }
+
+        const assemblyComponent: CasingComponent = {
+          ref_id: refId,
+          SectType: component.sect_type_code,
+          CompType:
+            component.comp_type_code === 'LIN'
+              ? 'CAS'
+              : component.comp_type_code,
+          Manufacturer: component.manufacturer,
+          Model: component.model,
+          description: component.catalog_key_desc,
+          StartMD: component.md_top,
+          BottomMD: component.md_base,
+          JointCount: component.joints,
+          Length: component['length'],
+          ComponentID: component.assembly_comp_id,
+          OD: component.od_body,
+          ID: component.id_body,
+          GradeID: component.grade_id,
+          Grade: component.grade,
+          ApproxiWeight: component.approximate_weight,
+          CasingSectionName: casing.assembly_name,
+          CasingSectionDescription: casing.assembly_name,
+          SerialNo: component.serial_no,
+          PressRatingTop: component.press_rating_top,
+          PressRatingBottom: component.press_rating_bog,
+          BurstPressure: component.pressure_burst,
+          CollapsePressure: component.pressure_collapse,
+          Stretchable: true,
+          barrier_id: barriers.map((barrier) => barrier.barrier_name).join(','),
+          barrier_from: barriers.length > 0 ? component.md_top : null,
+          barrier_to: barriers.length > 0 ? component.md_base : null,
+          reference: '',
+        };
+
+        assemblyComponents.push(assemblyComponent);
+      }
+      return assemblyComponents;
+    } catch (err) {
+      this.logger.error(err);
+      return [];
+    }
+  }
+
+  /**
+   * Returns Cement Jobs for a given wellbore
+   * @param queryData
+   * @param wellbore
+   * @param isLastWellbore
+   * @returns
+   */
+  async GetCementJobs(
+    queryData: WellSchematicQueryDTO,
+    wellbore: WellboreData,
+    nextWellbore: WellboreData,
+  ): Promise<CementStage[]> {
+    try {
+      const casings = await this.GetCasings(queryData, wellbore, nextWellbore);
+      const activeAssembliesIds =
+        await this.schematicHelper.getActiveAssembliesOnDate({
+          ...queryData,
+          wellbore_id: wellbore.wellbore_id,
+        });
+
+      const cementStagesQuery = this.dbConnection
+        .createQueryBuilder()
+        .from('CD_CEMENT_JOB', 'CCJ')
+        .where('CCJ.WELL_ID = :wellid', { wellid: queryData.well_id })
+        .andWhere('CCJ.WELLBORE_ID = :wellboreid', {
+          wellboreid: wellbore.wellbore_id,
+        })
+        .andWhere('CCJ.ASSEMBLY_ID IN (:...assemblyids)', {
+          assemblyids: activeAssembliesIds,
+        })
+        .andWhere('CCJ.JOB_START_DATE <= :date', {
+          date: queryData.schematic_date,
+        })
+        .innerJoin(
+          'CD_CEMENT_STAGE',
+          'CCS',
+          'CCS.WELL_ID = CCJ.WELL_ID AND CCS.WELLBORE_ID = CCJ.WELLBORE_ID AND CCS.CEMENT_JOB_ID = CCJ.CEMENT_JOB_ID',
+        )
+        .select([
+          'CCS.*',
+          'CCJ.assembly_id',
+          'CCJ.is_drilled_out',
+          'CCJ.job_type',
+          'CCJ.casing_test_press',
+          'CCJ.casing_test_duration',
+          'CCJ.test_comments',
+          'CCJ.date_report',
+          'CCJ.plug_type',
+          'CCJ.is_liner_neg_test_tool',
+          'CCJ.liner_emw_neg_test',
+        ])
+        .orderBy('md_top', 'ASC')
+        .orderBy('md_base', 'DESC');
+
+      if (nextWellbore) {
+        cementStagesQuery.andWhere('CCS.md_top <= :md', {
+          md: nextWellbore.ko_md,
+        });
+      }
+
+      const rawCementStages =
+        await cementStagesQuery.getRawManyNormalized<any>();
+      const cementStages: CementStage[] = [];
+
+      for (const stage of rawCementStages) {
+        const casingIndex = casings.findIndex(
+          (casing) => casing.AssemblyID === stage.assembly_id,
+        );
+        const casing = casings.find(
+          (casing) => casing.AssemblyID === stage.assembly_id,
+        );
+
+        stage.AssemblyName = casing.name;
+        stage.AssemblyOd = casing.assemblySize;
+
+        if (nextWellbore) {
+          stage.md_base = Math.min(stage.md_base, nextWellbore.ko_md);
+        }
+
+        const refId = `CdCementStageT/${queryData.well_id}+${queryData.wellbore_id}+${stage.cement_job_id}+${stage.cement_stage_id}`;
+        const barriers = await this.schematicHelper.getElementBarriers(
+          queryData.well_id,
+          queryData.scenario_id,
+          queryData.wellbore_id,
+          queryData.schematic_date,
+          refId,
+        );
+
+        const cementStage: CementStage = {
+          ref_id: refId,
+          TopMD: stage.md_top,
+          BottomMD: stage.md_base,
+          CasingIndex: casingIndex,
+          AssemblyID: '', //Mandatory to leave blank
+          AssemID: stage.assembly_id,
+          Tvd_top: stage.tvd_top,
+          Plug: stage.job_type.toUpperCase().includes('PLUG'),
+          Drilled: stage.is_drilled_out === 'Y',
+          MinimumDiameter: 0,
+          BottomOfAssembly: 0,
+          description: stage.job_type + ' - ' + stage.AssemblyName,
+          AssemblyName: stage.AssemblyName,
+          AssemblyOd: stage.AssemblyOd,
+          Color: '162,180,185',
+          reference: null,
+          jobReference: null,
+          stageName: stage.job_type,
+          CasingTest: stage.casing_test_press,
+          CasingTestDuration: stage.casing_test_duration,
+          CasingTestComment: stage.test_comments, //TODO: GET TEST COMMENTS
+          DateReport: stage.date_report,
+          PlugType: stage.plug_type,
+          LinerNegTestTool: stage.is_liner_neg_test_tool,
+          LinerEnwNegTest: stage.liner_emw_neg_test,
+          Barrier: barriers.map((barrier) => {
+            return {
+              barrier_id: barrier.barrier_name,
+              from: stage.md_top,
+              to: stage.md_base,
+            };
+          }),
+          barrier_id: barriers.map((barrier) => barrier.barrier_name).join(','),
+        };
+        cementStages.push(cementStage);
+      }
+
+      return cementStages;
+    } catch (err) {
+      this.logger.error(err);
+      return [];
+    }
+  }
+
+  /**
+   * Returns for a given wellbore its assemblies
+   * @param queryData
+   * @param wellbore
+   * @param nextWellbore
+   * @returns
+   */
+  async GetAssemblies(
+    queryData: WellSchematicQueryDTO,
+    wellbore: WellboreData,
+    nextWellbore: WellboreData,
+  ): Promise<Assembly[]> {
+    try {
+      const activeAssembliesIds =
+        await this.schematicHelper.getActiveAssembliesOnDate({
+          ...queryData,
+          wellbore_id: wellbore.wellbore_id,
+        });
+      const assembliesQuery = this.dbConnection
+        .createQueryBuilder()
+        .from('CD_ASSEMBLY', null)
+        .where('CD_ASSEMBLY.WELL_ID = :wellid', { wellid: queryData.well_id })
+        .andWhere('CD_ASSEMBLY.WELLBORE_ID = :wellboreid', {
+          wellboreid: wellbore.wellbore_id,
+        })
+        .andWhere('CD_ASSEMBLY.PHASE = :phase', { phase: 'ACTUAL' })
+        .andWhere('CD_ASSEMBLY.STRING_TYPE NOT IN (:...stringtypes)', {
+          stringtypes: ['Casing', 'Liner'],
+        })
+        .andWhere('CD_ASSEMBLY.ASSEMBLY_ID IN (:...assemblyids)', {
+          assemblyids: activeAssembliesIds,
+        })
+        .select('*')
+        .orderBy('MD_ASSEMBLY_TOP', 'ASC')
+        .addOrderBy('MD_ASSEMBLY_BASE', 'DESC');
+
+      if (nextWellbore) {
+        assembliesQuery.andWhere('CD_ASSEMBLY.MD_ASSEMBLY_BASE < :mdbase', {
+          mdbase: nextWellbore.ko_md,
+        });
+      }
+
+      const rawAssemblies = await assembliesQuery.getRawManyNormalized<any>();
+      const assemblies: Assembly[] = [];
+
+      for (const assembly of rawAssemblies) {
+        const ref_id = `CdAssemblyT/${assembly.well_id}+${assembly.wellbore_id}+${assembly.assembly_id}`;
+        const assemblyComponents: AssemblyComponent[] =
+          await this.GetAssemblyComponents(queryData, assembly, nextWellbore);
+
+        if (nextWellbore) {
+          assembly.md_assembly_base = Math.min(
+            assembly.md_assembly_base,
+            nextWellbore.ko_md,
+          );
+          assembly.tvd_assembly_base = Math.min(
+            assembly.tvd_assembly_base,
+            nextWellbore.ko_tvd,
+          );
+        }
+
+        const assemblyData: Assembly = {
+          ref_id: ref_id,
+          AssemblyID: assembly.assembly_id,
+          LocatedInsideID: '',
+          Umbilical: [],
+          Jewellery: [],
+          MinimumID: [],
+          Retrievable: [],
+          mdAssemblyTop: assembly.md_assembly_top,
+          mdAssemblyBase: assembly.md_assembly_base,
+          TvdAssemblyTop: assembly.tvd_assembly_top,
+          TvdAssemblyBase: assembly.tvd_assembly_base,
+          assemblySize: assembly.assembly_size,
+          isCasing: assembly.is_casing_liner === 'Y',
+          reference: null,
+          name: assembly.assembly_name,
+          Component: assemblyComponents,
+        };
+
+        assemblies.push(assemblyData);
+      }
+      return assemblies;
+    } catch (err) {
+      this.logger.error(err);
+      return [];
+    }
+  }
+
+  /**
+   * For a given assembly, returns its components
+   * @param queryData
+   * @param assembly
+   * @returns
+   */
+  async GetAssemblyComponents(
+    queryData: WellSchematicQueryDTO,
+    assembly: any,
+    nextWellbore: WellboreData,
+  ): Promise<AssemblyComponent[]> {
+    try {
+      const rawAssemblyComponentsQuery = await this.dbConnection
+        .createQueryBuilder()
+        .from('CD_ASSEMBLY_COMP', 'CD_ASSEMBLY_COMP')
+        .where('CD_ASSEMBLY_COMP.WELL_ID = :wellid', {
+          wellid: queryData.well_id,
+        })
+        .andWhere('CD_ASSEMBLY_COMP.WELLBORE_ID = :wellboreid', {
+          wellboreid: assembly.wellbore_id,
+        })
+        .andWhere('CD_ASSEMBLY_COMP.ASSEMBLY_ID = :assemblyid', {
+          assemblyid: assembly.assembly_id,
+        })
+        .orderBy('CD_ASSEMBLY_COMP.SEQUENCE_NO', 'ASC');
+
+      if (nextWellbore) {
+        rawAssemblyComponentsQuery.andWhere(
+          'CD_ASSEMBLY_COMP.MD_TOP < :mdbase',
+          { mdbase: nextWellbore.ko_md },
+        );
+      }
+
+      const rawAssemblyComponents =
+        await rawAssemblyComponentsQuery.getRawManyNormalized<any>();
+      const assemblyComponents: CasingComponent[] = [];
+      for (const [index, component] of rawAssemblyComponents.entries()) {
+        const refId = `CdAssemblyCompT_${component.sect_type_code.toUpperCase()}/${
+          component.well_id
+        }+${component.wellbore_id}+${component.assembly_id}+${
+          component.assembly_comp_id
+        }`;
+
+        const barriers = await this.schematicHelper.getElementBarriers(
+          queryData.well_id,
+          queryData.scenario_id,
+          queryData.wellbore_id,
+          queryData.schematic_date,
+          refId,
+        );
+
+        //TODO: Refactor this
+        const WEQP_SSSV = await this.GetAssemblySSSVInformation(
+          component.assembly_comp_id,
+        );
+        const packer = await this.GetAssemblyPackerInformation(
+          component.assembly_comp_id,
+        );
+
+        if (nextWellbore) {
+          component.md_top = Math.min(component.md_top, nextWellbore.ko_md);
+          component.md_base = Math.min(component.md_base, nextWellbore.ko_md);
+        }
+
+        const assemblyComponent: AssemblyComponent = {
+          ref_id: refId,
+          SectType: component.sect_type_code,
+          CompType: component.comp_type_code,
+          assemblyName: assembly.assembly_name,
+          StartMD: component.md_top,
+          BottomMD: component.md_base,
+          Length: component['length'],
+          OD: component.od_body,
+          ID: component.id_body,
+          ComponentID: component.assembly_comp_id,
+          RecordOpenPress: WEQP_SSSV.recorded_opening_pressure,
+          MaximunHydraulics: WEQP_SSSV.maximun_hydraulics_pressure,
+          RecordClosePress: WEQP_SSSV.recorded_closing_pressure,
+          NominalPress: WEQP_SSSV.nominal_opening_pressure,
+          FunctionTestPass: WEQP_SSSV.function_test_pass_fail,
+          PressureTestAbove: packer.pressure_test_above,
+          PressureTestBelow: packer.pressure_test_below,
+          Manufacturer: component.manufacturer,
+          Model: component.model,
+          SectionName: assembly.assembly_name,
+          SectionDescription: assembly.assembly_name,
+          PressRatingTop: component.press_rating_top,
+          CollapsePressure: component.pressure_collapse,
+          BurstPressure: component.pressure_burst,
+          ItemDescription: component.catalog_key_desc,
+          barrier_id: barriers.map((barrier) => barrier.barrier_name).join(','),
+          barrier_from: barriers.length > 0 ? component.md_top : null,
+          barrier_to: barriers.length > 0 ? component.md_base : null,
+          is_barrier_closed_at_top: index == 0,
+          is_barrier_closed_at_bottom:
+            index == rawAssemblyComponents.length - 1,
+          include_seals: true,
+          reference: '',
+          description: component.description,
+          ApproximateWeight: component.approximate_weight,
+          GradeId: component.grade,
+          Joints: component.joints,
+        };
+
+        assemblyComponents.push(assemblyComponent);
+      }
+      return assemblyComponents;
+    } catch (err) {
+      this.logger.error(err);
+      return [];
+    }
+  }
+
+  async GetAssemblySSSVInformation(assembly_comp_id: string) {
+    const ssvInformation = await this.dbConnection
+      .createQueryBuilder()
+      .from('CD_ASSEMBLY_COMP', null)
+      .leftJoin(
+        'CD_WEQP_SSSV',
+        'CD_WEQP_SSSV',
+        'CD_WEQP_SSSV.assembly_comp_id = CD_ASSEMBLY_COMP.assembly_comp_id',
+      )
+      .where('CD_ASSEMBLY_COMP.assembly_comp_id = :assembly_comp_id', {
+        assembly_comp_id: assembly_comp_id,
+      })
+      .select('CD_WEQP_SSSV.*')
+      .getRawOneNormalized();
+
+    return ssvInformation;
+  }
+
+  async GetAssemblyPackerInformation(assembly_comp_id: string) {
+    const packerInformation = await this.dbConnection
+      .createQueryBuilder()
+      .from('CD_ASSEMBLY_COMP', null)
+      .leftJoin(
+        'CD_WEQP_PACKER',
+        'CD_WEQP_PACKER',
+        'CD_WEQP_PACKER.assembly_comp_id = CD_ASSEMBLY_COMP.assembly_comp_id',
+      )
+      .where('CD_ASSEMBLY_COMP.assembly_comp_id = :assembly_comp_id', {
+        assembly_comp_id: assembly_comp_id,
+      })
+      .select('CD_WEQP_PACKER.*')
+      .getRawOneNormalized();
+
+    return packerInformation;
+  }
+
+  /**
+   * For a given wellbore, retrieves its perforations that are above the KO_MD of the next wellbore. If no next wellbore provided
+   * it will return all the open perforations assocciated with the wellbore.
+   * @param queryData
+   * @param wellbore
+   * @param nextWellbore
+   * @returns
+   */
+  async GetPerforations(
+    queryData: WellSchematicQueryDTO,
+    wellbore: WellboreData,
+    nextWellbore: WellboreData,
+  ) {
+    try {
+      const rawPerforationsQuery = this.dbConnection
+        .createQueryBuilder()
+        .from('CD_WELLBORE_OPENING', null)
+        .innerJoin(
+          'CD_OPENING_STATUS',
+          'CD_OPENING_STATUS',
+          'CD_OPENING_STATUS.wellbore_opening_id = CD_WELLBORE_OPENING.wellbore_opening_id',
+        )
+        .where('CD_WELLBORE_OPENING.well_id = :well_id', {
+          well_id: queryData.well_id,
+        })
+        .andWhere('CD_WELLBORE_OPENING.wellbore_id = :wellbore_id', {
+          wellbore_id: wellbore.wellbore_id,
+        })
+        .andWhere('CD_OPENING_STATUS.effective_date <= :effective_date', {
+          effective_date: queryData.schematic_date,
+        })
+        .select('CD_WELLBORE_OPENING.*, CD_OPENING_STATUS.status');
+
+      if (nextWellbore) {
+        rawPerforationsQuery.andWhere('CD_WELLBORE_OPENING.md_top <= :md_top', {
+          md_top: wellbore.ko_md,
+        });
+      }
+
+      const rawPerforations = await rawPerforationsQuery.getRawManyNormalized();
+
+      const perforations: Perforation[] = [];
+
+      for (const perforation of rawPerforations) {
+        const refId = `CdWellboreOpeningT/${queryData.well_id}+${wellbore.wellbore_id}`;
+
+        if (nextWellbore) {
+          perforation.md_base = Math.min(perforation.md_base, wellbore.ko_md);
+        }
+
+        const perforationData: Perforation = {
+          ref_id: refId,
+          StartMD: perforation.md_top,
+          EndMD: perforation.md_base,
+          Key: '00003',
+          Status: perforation.status,
+          name: '',
+        };
+
+        perforations.push(perforationData);
+      }
+      return perforations;
+    } catch (err) {
+      this.logger.error(err);
+      return [];
+    }
+  }
+
+  async GetFluids(
+    queryData: WellSchematicQueryDTO,
+    wellSchematic: WellSchematic,
+  ): Promise<Fluid[]> {
+    try {
+      const drillingFluid = await this.GetDrillingFluids(queryData);
+
+      const fluidRawData: any[] = [];
+
+      if (!drillingFluid) {
+        let annulusFluids = await this.GetAnnulusFluids(queryData);
+
+        if (annulusFluids.length > 0) {
+          annulusFluids = annulusFluids.map((fluid) => {
+            fluid['type'] = 'COMPLETION';
+            return fluid;
+          });
+        }
+
+        fluidRawData.push(...annulusFluids);
+      } else {
+        const singleFluid: any = {
+          well_id: drillingFluid['well_id'],
+          wellbore_id: drillingFluid['wellbore_id'],
+          install_date: drillingFluid['check_date'],
+          fluid_density: drillingFluid['density'],
+          fluid_type: drillingFluid['fluid_name'],
+          event_id: drillingFluid['event_id'],
+          type: 'DRILLING',
+          fluid_id: drillingFluid['fluid_id'],
+          md_base: drillingFluid['md_mud_sample'],
+        };
+        fluidRawData.push(singleFluid);
+      }
+
+      const fluidData: Fluid[] = [];
+
+      const depths = wellSchematic.ReferenceDepths;
+      const casings = wellSchematic.Casings.Casing;
+      const lastCasingIndex = casings.length - 1;
+
+      for (const fluidItem of fluidRawData) {
+        let refId;
+        if (fluidItem.type === 'COMPLETION') {
+          refId = `CdFluidT/${fluidItem.well_id}+${fluidItem.wellbore_id}+${fluidItem.event_id}+${fluidItem.completion_fluid_id}`;
+        } else {
+          refId = `CdFluidT/${fluidItem.well_id}+${fluidItem.wellbore_id}+${fluidItem.event_id}+${fluidItem.fluid_id}`;
+        }
+
+        const barriers = await this.schematicHelper.getElementBarriers(
+          queryData.well_id,
+          queryData.scenario_id,
+          queryData.wellbore_id,
+          queryData.schematic_date,
+          refId,
+        );
+
+        const color = 'rgb(212, 160, 49)';
+
+        const fluidDataItem: Fluid = {
+          ref_id: refId,
+          StartDepth:
+            fluidItem.type == 'COMPLETION'
+              ? Number(fluidItem.md_top)
+              : Number(-depths.DatumElevation) - Number(depths.AirGap),
+          EndDepth: fluidItem.md_base,
+          RealEndDepth: fluidItem.md_base,
+          InsideOpenHole: false,
+          InsideCasing: fluidItem.type !== 'COMPLETION',
+          InsideTubing: false,
+          CasingIndex: lastCasingIndex,
+          description: fluidItem.fluid_type,
+          FluidDensity: fluidItem.fluid_density,
+          TubingId: '',
+          Color: color,
+          FluidType: fluidItem.fluid_type,
+          Barrier: barriers.map((barrier) => {
+            return {
+              barrier_id: barrier.barrier_name,
+              from:
+                fluidItem.type == 'COMPLETION'
+                  ? fluidItem.md_top
+                  : -depths.DatumElevation + depths.AirGap,
+              to: fluidItem.md_base,
+            };
+          }),
+        };
+
+        fluidData.push(fluidDataItem);
+      }
+
+      return fluidData;
+    } catch (err) {
+      this.logger.error(err);
+      return [];
+    }
+  }
+
+  async GetDrillingFluids(queryData: WellSchematicQueryDTO) {
+    const schematicStartDate = new Date(
+      new Date(queryData.schematic_date).setHours(0, 0, 0),
+    );
+
+    const schematicEndDate = new Date(
+      new Date(queryData.schematic_date).setHours(23, 59, 59),
+    );
+
+    const drillingFluid = await this.dbConnection
+      .createQueryBuilder()
+      .from('CD_FLUID', null)
+      .where('CD_FLUID.well_id = :well_id', { well_id: queryData.well_id })
+      .andWhere('CD_FLUID.wellbore_id = :wellbore_id', {
+        wellbore_id: queryData.wellbore_id,
+      })
+      .andWhere('CD_FLUID.check_date <= :check_date_max', {
+        check_date_max: schematicEndDate,
+      })
+      .andWhere('CD_FLUID.check_date >= :check_date_min', {
+        check_date_min: schematicStartDate,
+      })
+      .orderBy('CD_FLUID.check_date', 'DESC')
+      .getRawOneNormalized();
+
+    return drillingFluid;
+  }
+
+  async GetAnnulusFluids(queryData: WellSchematicQueryDTO) {
+    const schematicStartDate = new Date(
+      new Date(queryData.schematic_date).setHours(0, 0, 0),
+    );
+
+    const schematicEndDate = new Date(
+      new Date(queryData.schematic_date).setHours(23, 59, 59),
+    );
+
+    const annularFluidDate = await this.dbConnection
+      .createQueryBuilder()
+      .from('CD_COMPLETION_FLUID', null)
+      .where('CD_COMPLETION_FLUID.well_id = :well_id', {
+        well_id: queryData.well_id,
+      })
+      .andWhere('CD_COMPLETION_FLUID.wellbore_id = :wellbore_id', {
+        wellbore_id: queryData.wellbore_id,
+      })
+      .andWhere('CD_COMPLETION_FLUID.install_date <= :install_date', {
+        install_date: schematicStartDate,
+      })
+      .andWhere(
+        new Brackets((qb) =>
+          qb
+            .where('CD_COMPLETION_FLUID.removal_date >= :removal_date', {
+              removal_date: schematicEndDate,
+            })
+            .orWhere('CD_COMPLETION_FLUID.removal_date IS NULL'),
+        ),
+      )
+      .orderBy('CD_COMPLETION_FLUID.install_date', 'DESC')
+      .getRawOneNormalized()
+      .then((data) => {
+        if (data) {
+          return data.install_date;
+        } else {
+          return null;
+        }
+      });
+
+    if (!annularFluidDate) {
+      return [];
+    }
+
+    const annularFluidStartDate = new Date(
+      new Date(annularFluidDate).setHours(0, 0, 0),
+    );
+
+    const annularFluidEndDate = new Date(
+      new Date(annularFluidDate).setHours(23, 59, 59),
+    );
+
+    const annularFluids = await this.dbConnection
+      .createQueryBuilder()
+      .from('CD_COMPLETION_FLUID', null)
+      .where('CD_COMPLETION_FLUID.well_id = :well_id', {
+        well_id: queryData.well_id,
+      })
+      .andWhere('CD_COMPLETION_FLUID.wellbore_id = :wellbore_id', {
+        wellbore_id: queryData.wellbore_id,
+      })
+      .andWhere('CD_COMPLETION_FLUID.install_date <= :install_date_max', {
+        install_date_max: annularFluidEndDate,
+      })
+      .andWhere('CD_COMPLETION_FLUID.install_date >= :install_date_min', {
+        install_date_min: annularFluidStartDate,
+      })
+      .andWhere(
+        new Brackets((qb) => {
+          return qb
+            .where('CD_COMPLETION_FLUID.removal_date >= :removal_date', {
+              removal_date: schematicStartDate,
+            })
+            .orWhere('CD_COMPLETION_FLUID.removal_date IS NULL');
+        }),
+      )
+      .orderBy('CD_COMPLETION_FLUID.install_date', 'DESC')
+      .getRawManyNormalized();
+
+    return annularFluids;
   }
 }

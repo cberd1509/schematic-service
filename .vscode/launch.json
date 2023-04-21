@@ -6,13 +6,14 @@
     "configurations": [
     
         {
-            "type": "node",
-            "request": "launch",
-            "name": "Jest debug current file",
-            "program": "${workspaceRoot}/node_modules/jest/bin/jest.js",
-            "args": ["--verbose", "-i", "--no-cache", "--testPathPattern", "${fileBasename}"],
-            "console": "integratedTerminal",
-            "internalConsoleOptions": "neverOpen"
-          }
+      "type": "chrome",
+      "request": "launch",
+      "name": "Karma Attach",
+      "url": "http://localhost:9876/debug.html",
+      "webRoot": "${workspaceFolder}",
+      "pathMapping": {
+        "/_karma_webpack_/": "${workspaceRoot}/"
+      }
+    }
     ]
 }

@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
+/* istanbul ignore file */
 import { SelectQueryBuilder } from 'typeorm/query-builder/SelectQueryBuilder';
 
 //Declaration Merging Of Module.

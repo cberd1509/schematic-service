@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Design } from '../interfaces/WellSchematicData';
 import { DataSource } from 'typeorm';
-//import '../extensions/extensions'
+import { WellSchematicQueryDTO } from '../interfaces/DTO/WellSchematicQueryDTO';
 
 @Injectable()
 export class SchematicHelper {
@@ -63,7 +63,7 @@ export class SchematicHelper {
     wellbore_id: string,
     schematic_date: Date,
     ref_id: string,
-  ) {
+  ): Promise<any[]> {
     this.logger.log('Getting element barriers data ' + ref_id);
     try {
       const barriersQuery = this.dataSource
@@ -84,7 +84,7 @@ export class SchematicHelper {
           WELLBORE_ID: wellbore_id,
           SCENARIO_ID: scenario_id,
         })
-        .andWhere('CBEL.REF_ID = ref_id', { ref_id })
+        .andWhere('CBEL.REF_ID = :ref_id', { ref_id })
         .select(['CBE.name as barrier_name', 'CBEL.*']);
 
       if (schematic_date) {
@@ -111,5 +111,93 @@ export class SchematicHelper {
       this.logger.error(err);
       return [];
     }
+  }
+
+  async getMaxHoleSectionDiameter(holeSection: any): Promise<number> {
+    return await this.dataSource
+      .createQueryBuilder()
+      .from('CD_HOLE_SECT', null)
+      .where({
+        well_id: holeSection.well_id,
+        wellbore_id: holeSection.wellbore_id,
+        hole_sect_group_id: holeSection.hole_sect_group_id,
+        sect_type_code: 'OH',
+      })
+      .andWhere('hole_size IS NOT NULL')
+      .orderBy('length', 'DESC')
+      .limit(1)
+      .getRawOneNormalized()
+      .then((value) => {
+        if (value) return value.hole_size;
+        else return 0;
+      });
+  }
+
+  async getCatalogs(): Promise<any> {
+    return await this.dataSource
+      .createQueryBuilder()
+      .from('CD_CSG_CATALOG', null)
+      .innerJoin(
+        'CD_GRADE',
+        'CD_GRADE',
+        'CD_CSG_CATALOG.grade_id = CD_GRADE.grade_id',
+      )
+      .select([
+        'od_body',
+        'nominal_weight',
+        'grade',
+        'internal_yield_press',
+        'collapse_resistance',
+      ])
+      .getRawManyNormalized();
+  }
+
+  async getActiveAssembliesOnDate(queryData: WellSchematicQueryDTO) {
+    const query = await this.dataSource
+      .createQueryBuilder()
+      .from('CD_ASSEMBLY_STATUS', null)
+
+      .innerJoin(
+        (subQuery) => {
+          return subQuery
+            .from('CD_ASSEMBLY_STATUS', null)
+            .where('date_status <= :date', { date: queryData.schematic_date })
+            .select(
+              'assembly_id,well_id,wellbore_id,max(date_status) as max_date',
+            )
+            .groupBy('assembly_id,well_id,wellbore_id');
+        },
+        'Q1',
+        `Q1.assembly_id = CD_ASSEMBLY_STATUS.assembly_id AND 
+         Q1.well_id = CD_ASSEMBLY_STATUS.well_id AND 
+         Q1.wellbore_id = CD_ASSEMBLY_STATUS.wellbore_id 
+         AND Q1.max_date = CD_ASSEMBLY_STATUS.date_status`,
+      )
+      .where('CD_ASSEMBLY_STATUS.well_id = :wellId', {
+        wellId: queryData.well_id,
+      })
+      .andWhere('CD_ASSEMBLY_STATUS.wellbore_id = :wellboreId', {
+        wellboreId: queryData.wellbore_id,
+      })
+      .andWhere('CD_ASSEMBLY_STATUS.status = :status', { status: 'INSTALLED' })
+      .select('CD_ASSEMBLY_STATUS.assembly_id');
+
+    return await query
+      .getRawManyNormalized()
+      .then((value: any) => value.map((x) => x.assembly_id));
+  }
+
+  async getLastDailyreport(queryData: WellSchematicQueryDTO) {
+    return await this.dataSource
+      .createQueryBuilder()
+      .from('DM_DAILY', null)
+      .where('well_id = :wellId', { wellId: queryData.well_id })
+      .andWhere('wellbore_id = :wellboreId', {
+        wellboreId: queryData.wellbore_id,
+      })
+      .andWhere('date_report <= :date', { date: queryData.schematic_date })
+      .orderBy('date_report', 'DESC')
+      .limit(1)
+      .getRawOneNormalized();
   }
 }

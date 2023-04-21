@@ -347,6 +347,7 @@ export type HoleSectionComponent = {
   name?: string;
   ref_id?: string;
   reference?: string;
+  IntegrityTest: IntegrityTest[];
 };
 
 export type HoleSections = {
@@ -359,6 +360,9 @@ export type IntegrityTest = {
   lot_tvd?: number;
   test_type?: string;
   weight_lot_emw?: number;
+  weight_lot_amw?: number;
+  lot_press?: number;
+  total_bh_press?: number;
 };
 
 export type Lithology = {

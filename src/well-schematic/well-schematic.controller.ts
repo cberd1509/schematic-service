@@ -1,4 +1,4 @@
-import { Body, Controller, Logger, Post } from '@nestjs/common';
+import { Body, Controller, HttpCode, Logger, Post } from '@nestjs/common';
 import { WellSchematicQueryDTO } from 'src/common/interfaces/DTO/WellSchematicQueryDTO';
 import { WellSchematicService } from './well-schematic.service';
 import * as moment from 'moment';
@@ -10,6 +10,7 @@ export class WellSchematicController {
   constructor(private schematicService: WellSchematicService) {}
 
   @Post('getWellSchematic')
+  @HttpCode(200)
   getWellSchematic(@Body() body: WellSchematicQueryDTO) {
     this.logger.log(
       'Getting Well Schematic for well_id: ' +
@@ -24,7 +25,6 @@ export class WellSchematicController {
 
     //Converts date to start of day
     body.schematic_date = moment(body.schematic_date).startOf('day').toDate();
-
     return this.schematicService.getWellSchematic(body);
   }
 }
