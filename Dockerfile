@@ -1,20 +1,5 @@
-###################
-# BUILD FOR LOCAL DEVELOPMENT
-###################
+FROM node:18-alpine
 
-FROM node:18-alpine As development
-
-WORKDIR /app
-
-COPY ./package.json ./package-lock.json ./
-RUN npm install
-
-# Set NODE_ENV environment variable
-ENV NODE_ENV production
-
-COPY ./ ./
-RUN npm run build
-USER node
 
 RUN apk --no-cache add libaio libnsl libc6-compat curl && \
     cd /tmp && \
@@ -32,6 +17,16 @@ RUN apk --no-cache add libaio libnsl libc6-compat curl && \
 
 ENV LD_LIBRARY_PATH /usr/lib/instantclient
 
+WORKDIR /app
+
+COPY ./package.json ./package-lock.json ./
+RUN npm install
+
+# Set NODE_ENV environment variable
+ENV NODE_ENV production
+
+COPY ./ ./
+RUN npm run build
 
 # Start the server using the production build
 CMD [ "node", "--max-old-space-size=8192", "dist/main.js" ]
