@@ -1,4 +1,4 @@
-FROM node:18-alpine
+FROM node:16.18.1-bullseye-slim
 
 
 RUN apk --no-cache add libaio libnsl libc6-compat curl && \
