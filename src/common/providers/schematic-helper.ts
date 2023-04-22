@@ -83,6 +83,7 @@ export class SchematicHelper {
       })
       .getRawManyNormalized();
 
+      const finalElements :any[] = [];
     for (let element of elements) {
       const elementHistory = await this.dataSource
         .createQueryBuilder()
@@ -136,9 +137,11 @@ export class SchematicHelper {
         create_user: lastEnvelopeEvaluation.create_user,
         elementHistory: [],
       };
+
+      finalElements.push(element);
     }
 
-    return elements;
+    return finalElements;
   }
 
   /**
