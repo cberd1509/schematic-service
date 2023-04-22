@@ -51,7 +51,7 @@ USER node
 # PRODUCTION
 ###################
 
-FROM node:18-alpine As production
+FROM node:16.18.1-bullseye-slim
 
 # Copy the bundled code from the build stage to the production image
 COPY --chown=node:node --from=build /usr/src/app/node_modules ./node_modules
@@ -77,4 +77,4 @@ ENV LD_LIBRARY_PATH /usr/lib/instantclient
 
 
 # Start the server using the production build
-CMD [ "node", "dist/main.js" ]
+CMD [ "node", "--max-old-space-size=8192", "dist/main.js" ]
