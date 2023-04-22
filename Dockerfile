@@ -1,25 +1,21 @@
 FROM node:16.18.1-bullseye-slim
 
+RUN apt-get update -y && apt-get upgrade -y && apt-get install -y openssl zip unzip
 
-RUN apk --no-cache add libaio libnsl libc6-compat curl && \
-    cd /tmp && \
-    curl -o instantclient-basiclite.zip https://download.oracle.com/otn_software/linux/instantclient/instantclient-basiclite-linuxx64.zip -SL && \
-    unzip instantclient-basiclite.zip && \
-    mv instantclient*/ /usr/lib/instantclient && \
-    rm instantclient-basiclite.zip && \
-    ln -s /usr/lib/instantclient/libclntsh.so.21.1 /usr/lib/libclntsh.so && \
-    ln -s /usr/lib/instantclient/libocci.so.21.1 /usr/lib/libocci.so && \
-    ln -s /usr/lib/instantclient/libociicus.so /usr/lib/libociicus.so && \
-    ln -s /usr/lib/instantclient/libnnz21.so /usr/lib/libnnz21.so && \
-    ln -s /usr/lib/libnsl.so.2 /usr/lib/libnsl.so.1 && \
-    ln -s /lib/libc.so.6 /usr/lib/libresolv.so.2 && \
-    ln -s /lib64/ld-linux-x86-64.so.2 /usr/lib/ld-linux-x86-64.so.2
-
-ENV LD_LIBRARY_PATH /usr/lib/instantclient
+RUN apt-get install -y libgmp-dev libpq-dev libaio1 libpng-dev libjpeg-dev libfreetype6-dev gnupg wget apt-utils libxml2-dev gnupg apt-transport-https
+# Download Oracle
+RUN mkdir -p /opt/oracle \
+    && cd /opt/oracle \
+    && wget https://download.oracle.com/otn_software/linux/instantclient/215000/instantclient-basic-linux.x64-21.5.0.0.0dbru.zip \
+    && wget https://download.oracle.com/otn_software/linux/instantclient/215000/instantclient-sdk-linux.x64-21.5.0.0.0dbru.zip \
+    && unzip instantclient-basic-linux.x64-21.5.0.0.0dbru.zip \
+    && unzip instantclient-sdk-linux.x64-21.5.0.0.0dbru.zip \
+    && echo /opt/oracle/instantclient_21_5 > /etc/ld.so.conf.d/oracle-instantclient.conf \
+    && ldconfig
 
 WORKDIR /app
 
-COPY ./package.json ./package-lock.json ./
+COPY package* ./
 RUN npm install
 
 # Set NODE_ENV environment variable
