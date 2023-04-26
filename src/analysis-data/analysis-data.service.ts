@@ -179,7 +179,8 @@ export class AnalysisDataService {
             wellbore_id: body.wellbore_id,
             scenario_id: body.scenario_id,
           })
-          .delete();
+          .delete()
+          .execute();
       } else {
         //Creates a new Element
         const barrierElementId = StringUtils.makeId(5);
