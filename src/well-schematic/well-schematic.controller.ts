@@ -8,6 +8,7 @@ import {
   Param,
 } from '@nestjs/common';
 import { WellSchematicQueryDTO } from 'src/common/interfaces/DTO/WellSchematicQueryDTO';
+import { BarriersModifyDTO } from 'src/common/interfaces/DTO/BarriersModifyDTO';
 import { WellSchematicService } from './well-schematic.service';
 import * as moment from 'moment';
 import { AnalysisDataService } from '../analysis-data/analysis-data.service';
@@ -120,6 +121,16 @@ export class WellSchematicController {
     );
     body.schematic_date = moment(body.schematic_date).startOf('day').toDate();
     return this.schematicService.getBarrierDiagrams(body);
+  }
+
+  @Post("barrier-modify")
+  @HttpCode(200)
+  modifyBarriers(@Body() body: BarriersModifyDTO) {
+    this.logger.log(
+      `Modifying barrier for well ${body.well_id} wellbore id ${body.wellbore_id}`,
+    );
+    body.schematic_date = moment(body.schematic_date).startOf('day').toDate();
+    return this.analysisDataService.modifyBarriers(body);
   }
 
 }
