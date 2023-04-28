@@ -1112,6 +1112,10 @@ export class ActualSchematicProvider extends SchematicProvider {
         wellbore_id: wellbore.wellbore_id,
       });
 
+    if (activeAssembliesIds.length === 0) {
+      return [];
+    }
+
     const rawCasingStringsQuery = this.dbConnection
       .createQueryBuilder()
       .from('CD_ASSEMBLY', 'CD_ASSEMBLY')
@@ -1127,7 +1131,7 @@ export class ActualSchematicProvider extends SchematicProvider {
         stringtype: ['Casing', 'Liner'],
       })
       .andWhere('CD_ASSEMBLY.ASSEMBLY_ID IN (:...assemblyid)', {
-        assemblyid: activeAssembliesIds,
+        assemblyid: activeAssembliesIds || [''],
       })
       .orderBy('CD_ASSEMBLY.MD_ASSEMBLY_TOP', 'ASC')
       .orderBy('CD_ASSEMBLY.MD_ASSEMBLY_BASE', 'ASC');
@@ -1137,6 +1141,11 @@ export class ActualSchematicProvider extends SchematicProvider {
         md: nextWellbore.ko_md,
       });
     }
+
+    console.log(
+      rawCasingStringsQuery.getQueryAndParameters(),
+      rawCasingStringsQuery.getSql(),
+    );
 
     const rawCasingStrings =
       await rawCasingStringsQuery.getRawManyNormalized<any>();
@@ -1313,6 +1322,10 @@ export class ActualSchematicProvider extends SchematicProvider {
           wellbore_id: wellbore.wellbore_id,
         });
 
+      if (activeAssembliesIds.length === 0) {
+        return [];
+      }
+
       const cementStagesQuery = this.dbConnection
         .createQueryBuilder()
         .from('CD_CEMENT_JOB', 'CCJ')
@@ -1444,6 +1457,10 @@ export class ActualSchematicProvider extends SchematicProvider {
           ...queryData,
           wellbore_id: wellbore.wellbore_id,
         });
+
+      if (activeAssembliesIds.length === 0) {
+        return [];
+      }
       const assembliesQuery = this.dbConnection
         .createQueryBuilder()
         .from('CD_ASSEMBLY', null)
@@ -1940,21 +1957,29 @@ export class ActualSchematicProvider extends SchematicProvider {
     return annularFluids;
   }
 
-  async GetLogs(body: WellSchematicQueryDTO){
-
+  async GetLogs(body: WellSchematicQueryDTO) {
     const logsRaw = await this.dbConnection
       .createQueryBuilder()
       .from('DM_LOG_INTERVAL', null)
       .leftJoin('DM_LOG', 'DM_LOG', 'DM_LOG_INTERVAL.log_id= DM_LOG.log_id')
-      .leftJoin('DM_LOG_DESC', 'DM_LOG_DESC', 'DM_LOG.log_id =DM_LOG_DESC.log_id')
-      .leftJoin('PL_LOG_INTERVAL_EXT', 'PL_LOG_INTERVAL_EXT', 'PL_LOG_INTERVAL_EXT.log_interval_id = DM_LOG_INTERVAL.log_interval_id')
+      .leftJoin(
+        'DM_LOG_DESC',
+        'DM_LOG_DESC',
+        'DM_LOG.log_id =DM_LOG_DESC.log_id',
+      )
+      .leftJoin(
+        'PL_LOG_INTERVAL_EXT',
+        'PL_LOG_INTERVAL_EXT',
+        'PL_LOG_INTERVAL_EXT.log_interval_id = DM_LOG_INTERVAL.log_interval_id',
+      )
       .where('DM_LOG_INTERVAL.well_id = :well_id', { well_id: body.well_id })
       .andWhere('DM_LOG_INTERVAL.wellbore_id = :wellbore_id', {
         wellbore_id: body.wellbore_id,
       })
       .select(
         'DM_LOG_INTERVAL.*, DM_LOG.reason, DM_LOG_DESC.comments, PL_LOG_INTERVAL_EXT.assembly_name',
-      ).getRawManyNormalized();
+      )
+      .getRawManyNormalized();
 
     const logs = logsRaw.map((log) => {
       return {
