@@ -12,6 +12,7 @@ import { BarriersModifyDTO } from 'src/common/interfaces/DTO/BarriersModifyDTO';
 import { WellSchematicService } from './well-schematic.service';
 import * as moment from 'moment';
 import { AnalysisDataService } from '../analysis-data/analysis-data.service';
+import { AnnulusModifyDTO } from '../common/interfaces/DTO/AnnulusModifyDTO';
 
 @Controller('well-schematic-data')
 export class WellSchematicController {
@@ -103,7 +104,7 @@ export class WellSchematicController {
     return this.analysisDataService.getAttachments(body);
   }
 
-  @Post("barriers")
+  @Post('barriers')
   @HttpCode(200)
   getBarriers(@Body() body: WellSchematicQueryDTO) {
     this.logger.log(
@@ -113,7 +114,7 @@ export class WellSchematicController {
     return this.schematicService.getBarriers(body);
   }
 
-  @Post("barrier-diagrams")
+  @Post('barrier-diagrams')
   @HttpCode(200)
   getBarrierDiagrams(@Body() body: WellSchematicQueryDTO) {
     this.logger.log(
@@ -123,7 +124,7 @@ export class WellSchematicController {
     return this.schematicService.getBarrierDiagrams(body);
   }
 
-  @Post("barrier-modify")
+  @Post('barrier-modify')
   @HttpCode(200)
   modifyBarriers(@Body() body: BarriersModifyDTO) {
     this.logger.log(
@@ -133,4 +134,9 @@ export class WellSchematicController {
     return this.analysisDataService.modifyBarriers(body);
   }
 
+  @Post('annulus-modify')
+  @HttpCode(200)
+  modifyAnnulus(@Body() body: AnnulusModifyDTO) {
+    return 200;
+  }
 }
