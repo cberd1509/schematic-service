@@ -13,6 +13,8 @@ import { WellSchematicService } from './well-schematic.service';
 import * as moment from 'moment';
 import { AnalysisDataService } from '../analysis-data/analysis-data.service';
 import { AnnulusModifyDTO } from '../common/interfaces/DTO/AnnulusModifyDTO';
+import { BarriersEvaluationDTO } from '../common/interfaces/DTO/BarriersEvaluationDTO';
+import { AnnulusEvaluationDTO } from '../common/interfaces/DTO/AnnulusEvaluationDTO';
 
 @Controller('well-schematic-data')
 export class WellSchematicController {
@@ -134,9 +136,32 @@ export class WellSchematicController {
     return this.analysisDataService.modifyBarriers(body);
   }
 
-  @Post('annulus-modify')
+  @Post('set-annulus-values')
   @HttpCode(200)
   modifyAnnulus(@Body() body: AnnulusModifyDTO) {
-    return 200;
+    this.logger.log(
+      `Modifying annulus for well ${body.well_id} wellbore id ${body.wellbore_id}`,
+    );
+    body.schematic_date = moment(body.schematic_date).startOf('day').toDate();
+    return this.analysisDataService.modifyAnnulus(body);
   }
+
+  @Post('set-barrier-evaluation')
+  @HttpCode(200)
+  setBarrierEvaluation(@Body() body: BarriersEvaluationDTO[]) {
+    this.logger.log(
+      `Setting barrier evaluation for barrier diagram ${body[0].barrier_diagram_id}`,
+    );
+    return this.analysisDataService.setBarrierEvaluation(body);
+  }
+
+  @Post('set-annulus-evaluation')
+	@HttpCode(200)
+  setAnnulusEvaluation(@Body() body: AnnulusEvaluationDTO[]) {
+    this.logger.log(
+      `Setting annulus evaluation for barrier diagram ${body[0].barrier_diagram_id}`,
+    );
+    return this.analysisDataService.setAnnulusEvaluation(body);
+  }
+  
 }

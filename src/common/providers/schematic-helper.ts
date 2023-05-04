@@ -2,6 +2,9 @@ import { Injectable, Logger, Scope } from '@nestjs/common';
 import { BarrierData, Design } from '../interfaces/WellSchematicData';
 import { DataSource } from 'typeorm';
 import { WellSchematicQueryDTO } from '../interfaces/DTO/WellSchematicQueryDTO';
+import { BarriersEvaluationDTO } from '../interfaces/DTO/BarriersEvaluationDTO';
+import { BarrierDiagramData } from '../interfaces/BarrierDiagramData';
+import * as StringUtils from '../../common/util/StringUtils';
 
 @Injectable({ scope: Scope.REQUEST })
 export class SchematicHelper {
@@ -83,7 +86,7 @@ export class SchematicHelper {
       })
       .getRawManyNormalized();
 
-      const finalElements :any[] = [];
+    const finalElements: any[] = [];
     for (let element of elements) {
       const elementHistory = await this.dataSource
         .createQueryBuilder()
@@ -345,5 +348,62 @@ export class SchematicHelper {
       .orderBy('date_report', 'DESC')
       .limit(1)
       .getRawOneNormalized();
+  }
+
+  getBarrierStatus(elements: BarriersEvaluationDTO[]) {
+    for (const component of elements) {
+      if (component.status === 'No Efectivas' || component.status == null)
+        return 'No Efectivas';
+    }
+    for (const component of elements) {
+      if (component.status === 'Parcialmente Efectivas')
+        return 'Parcialmente Efectivas';
+    }
+    return 'Efectivas';
+  }
+
+  /**
+   *
+   * @param well_id
+   * @param wellbore_id
+   * @param schematic_date
+   */
+  async getOrCreatBarrierDiagram(
+    well_id: string,
+    wellbore_id: string,
+    scenario_id: string,
+    schematic_date: Date,
+  ): Promise<BarrierDiagramData> {
+    const barrierDiagram = await this.dataSource
+      .createQueryBuilder()
+      .from('CD_BARRIER_DIAGRAM_T', null)
+      .where('well_id=:well_id', { well_id: well_id })
+      .andWhere('wellbore_id=:wellbore_id', { wellbore_id: wellbore_id })
+      .andWhere('scenario_id=:scenario_id', { scenario_id: scenario_id })
+      .andWhere('diagram_date=:diagram_date', { diagram_date: schematic_date })
+      .getRawOneNormalized();
+
+    if (barrierDiagram) {
+      return barrierDiagram;
+    } else {
+      const barrierDiagramId = StringUtils.makeId(5);
+      await this.dataSource
+        .createQueryBuilder()
+        .insert()
+        .into('CD_BARRIER_DIAGRAM_T')
+        .values({
+          WELL_ID: well_id,
+          WELLBORE_ID: wellbore_id,
+          SCENARIO_ID: scenario_id,
+          DIAGRAM_DATE: schematic_date,
+          BARRIER_DIAGRAM_ID: barrierDiagramId,
+        })
+        .execute();
+
+        return await this.dataSource.createQueryBuilder()
+        .from('CD_BARRIER_DIAGRAM_T', null)
+        .where("barrier_diagram_id = :barrier_diagram_id", { barrier_diagram_id: barrierDiagramId })
+        .getRawOneNormalized();
+    }
   }
 }

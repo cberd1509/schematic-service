@@ -4,6 +4,7 @@ import { WellSchematicQueryDTO } from '../common/interfaces/DTO/WellSchematicQue
 import { ActualSchematicProvider } from '../common/providers/actual-schematic-provider';
 import { DesignSchematicProvider } from '../common/providers/design-schematic-provider';
 import { SchematicHelper } from '../common/providers/schematic-helper';
+import { AnnulusEvaluationDTO } from '../common/interfaces/DTO/AnnulusEvaluationDTO';
 
 @Injectable()
 export class WellSchematicService {

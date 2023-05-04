@@ -2,15 +2,21 @@ import { Injectable, Logger } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { WellSchematicQueryDTO } from '../common/interfaces/DTO/WellSchematicQueryDTO';
 import { BarriersModifyDTO } from '../common/interfaces/DTO/BarriersModifyDTO';
-import { BarrierDiagramData } from '../common/interfaces/WellSchematicData';
 import { BarrierEnvelopeData } from '../common/interfaces/BarrierEnvelopeData';
 import * as StringUtils from '../common/util/StringUtils';
 import { BarrierElementData } from '../common/interfaces/BarrierElementData';
+import { BarriersEvaluationDTO } from '../common/interfaces/DTO/BarriersEvaluationDTO';
+import { SchematicHelper } from '../common/providers/schematic-helper';
+import { AnnulusModifyDTO } from '../common/interfaces/DTO/AnnulusModifyDTO';
+import { AnnulusEvaluationDTO } from '../common/interfaces/DTO/AnnulusEvaluationDTO';
 @Injectable()
 export class AnalysisDataService {
   private readonly logger = new Logger(AnalysisDataService.name);
 
-  constructor(private dataSource: DataSource) {}
+  constructor(
+    private dataSource: DataSource,
+    private schematicHelper: SchematicHelper,
+  ) {}
 
   getExistingReports(body: WellSchematicQueryDTO) {
     return this.dataSource
@@ -83,37 +89,14 @@ export class AnalysisDataService {
   }
 
   async modifyBarriers(body: BarriersModifyDTO) {
-    let currentBarrierDiagram = await this.dataSource
-      .createQueryBuilder()
-      .from('CD_BARRIER_DIAGRAM_T', null)
-      .where('WELL_ID = :well_id', { well_id: body.well_id })
-      .andWhere('WELLBORE_ID = :wellbore_id', { wellbore_id: body.wellbore_id })
-      .andWhere('SCENARIO_ID = :scenario_id', { scenario_id: body.scenario_id })
-      .andWhere('DIAGRAM_DATE = :diagram_date', {
-        diagram_date: body.schematic_date,
-      })
-      .getRawOneNormalized<BarrierDiagramData>();
-
-    let barrierDiagramId: string = currentBarrierDiagram?.barrier_diagram_id;
-
-    if (!currentBarrierDiagram) {
-      //If there's no current barrier diagram, we should create a new one.
-      barrierDiagramId = StringUtils.makeId(5);
-
-      currentBarrierDiagram = await this.dataSource
-        .createQueryBuilder()
-        .insert()
-        .into('CD_BARRIER_DIAGRAM_T')
-        .values({
-          BARRIER_DIAGRAM_ID: barrierDiagramId,
-          WELL_ID: body.well_id,
-          SCENARIO_ID: body.scenario_id,
-          WELLBORE_ID: body.wellbore_id,
-          DIAGRAM_DATE: body.schematic_date,
-        })
-        .execute()
-        .then((res) => res.raw[0] as BarrierDiagramData);
-    }
+    const barrierDiagramId = (
+      await this.schematicHelper.getOrCreatBarrierDiagram(
+        body.well_id,
+        body.wellbore_id,
+        body.scenario_id,
+        body.schematic_date,
+      )
+    ).barrier_diagram_id;
 
     for (const barrier of body.barrier_modify_data) {
       let envelopeData = await this.dataSource
@@ -233,6 +216,243 @@ export class AnalysisDataService {
           .values(insertObject)
           .execute();
       }
+    }
+
+    return true;
+  }
+
+  async setBarrierEvaluation(body: BarriersEvaluationDTO[]): Promise<boolean> {
+    //Define Common Data
+    const wellId = body[0].ref_id.split('/')[1].split('+')[0];
+    const wellboreId = body[0].ref_id.split('/')[1].split('+')[1];
+    const scenarioId = body[0].scenario_id;
+    const barrierDiagramId = body[0].barrier_diagram_id;
+    const createUser = body[0].create_user;
+
+    const currentDate = new Date();
+
+    const barrierEnvelopeMap = new Map<string, BarriersEvaluationDTO[]>();
+
+    for (const barrierElement of body) {
+      const key = barrierElement.barrier_envelope_id;
+
+      if (!barrierEnvelopeMap.has(key)) barrierEnvelopeMap.set(key, []);
+      barrierEnvelopeMap.get(key).push(barrierElement);
+    }
+
+    for (const [key, value] of barrierEnvelopeMap) {
+      //Deletes any existing Evaluation for Barrier Envelope
+      await this.dataSource
+        .createQueryBuilder()
+        .delete()
+        .from('CD_BARRIER_ENV_TEST_LINK_T')
+        .where({
+          barrier_envelope_id: key,
+        })
+        .execute();
+
+      await this.dataSource
+        .createQueryBuilder()
+        .delete()
+        .from('CD_BARRIER_ENVELOPE_TEST_T')
+        .where({
+          barrier_envelope_id: key,
+        })
+        .execute();
+
+      //Creates a new Evaluation for Barrier Envelope
+      const envelopeTestId = StringUtils.makeId(5);
+      const envTestData = {
+        WELL_ID: wellId,
+        WELLBORE_ID: wellboreId,
+        BARRIER_ENVELOPE_ID: key,
+        BARRIER_ENVELOPE_TEST_ID: envelopeTestId,
+        STATUS: this.schematicHelper.getBarrierStatus(value),
+        LAST_TEST_DATE: currentDate,
+        SCENARIO_ID: scenarioId,
+        BARRIER_DIAGRAM_ID: barrierDiagramId,
+        CREATE_USER: createUser,
+      };
+
+      await this.dataSource
+        .createQueryBuilder()
+        .insert()
+        .into('CD_BARRIER_ENVELOPE_TEST_T')
+        .values(envTestData)
+        .execute();
+
+      //Creates a new Audit for Barrier Envelope
+      try {
+        await this.dataSource
+          .createQueryBuilder()
+          .insert()
+          .into('CD_BARRIER_ENVELOPE_TEST_AUDIT')
+          .values(envTestData);
+      } catch (ex) {
+        this.logger.error(
+          'An error ocurred while inserting audit info for CD BARRIER ENV TEST',
+        );
+      }
+
+      this.logger.log('Inserted new Envelope Test');
+
+      for (const element of value) {
+        //Creates a new Component Evaluation Record
+        const data = {
+          BARRIER_ELEMENT_ID: element.barrier_element_id,
+          BARRIER_ENVELOPE_ID: element.barrier_envelope_id,
+          BARRIER_ENVELOPE_TEST_ID: envelopeTestId,
+          BARRIER_DIAGRAM_ID: barrierDiagramId,
+          LAST_TEST_DATE: currentDate,
+          WELL_ID: wellId,
+          WELLBORE_ID: wellboreId,
+          SCENARIO_ID: scenarioId,
+          STATUS: element.status,
+          COMPONENT_OVALITY: element.component_ovality,
+          COMPONENT_WEARING: element.component_wearing,
+          DETAILS: element.details,
+        };
+
+        //Inserts the new Component Evaluation Record
+        this.dataSource
+          .createQueryBuilder()
+          .insert()
+          .into('CD_BARRIER_ENV_TEST_LINK_T')
+          .values(data)
+          .execute();
+
+        //Creates an audit record
+        try {
+          await this.dataSource
+            .createQueryBuilder()
+            .insert()
+            .into('CD_BARRIER_ENV_TEST_LINK_AUDIT')
+            .values(data)
+            .execute();
+        } catch (ex) {
+          this.logger.error(
+            'An error ocurred while inserting audit info for CD BARRIER ENV TEST LINK',
+          );
+        }
+      }
+    }
+
+    return true;
+  }
+
+  async modifyAnnulus(body: AnnulusModifyDTO) {
+    const barrierDiagramId = (
+      await this.schematicHelper.getOrCreatBarrierDiagram(
+        body.well_id,
+        body.wellbore_id,
+        body.scenario_id,
+        body.schematic_date,
+      )
+    ).barrier_diagram_id;
+
+    this.dataSource
+      .createQueryBuilder()
+      .delete()
+      .from('CD_ANNULUS_ELEMENT_T')
+      .where('well_id=:well_id', { well_id: body.well_id })
+      .andWhere('wellbore_id=:wellbore_id', { wellbore_id: body.wellbore_id })
+      .andWhere('scenario_id=:scenario_id', { scenario_id: body.scenario_id })
+      .andWhere('barrier_diagram_id=:barrier_diagram_id', {
+        barrier_diagram_id: barrierDiagramId,
+      })
+      .andWhere('name=:name', { name: body.name })
+      .execute();
+
+    this.dataSource
+      .createQueryBuilder()
+      .insert()
+      .into('CD_ANNULUS_ELEMENT_T')
+      .values({
+        WELL_ID: body.well_id,
+        WELLBORE_ID: body.wellbore_id,
+        SCENARIO_ID: body.scenario_id,
+        BARRIER_DIAGRAM_ID: barrierDiagramId,
+        NAME: body.name,
+        PRESSURE: body.pressure,
+        DENSITY: body.density,
+        ANNULUS_ELEMENT_ID: StringUtils.makeId(5),
+      })
+      .execute();
+
+    return true;
+  }
+
+  async setAnnulusEvaluation(body: AnnulusEvaluationDTO[]) {
+    for (const evaluationData of body) {
+      this.dataSource
+        .createQueryBuilder()
+        .delete()
+        .from('CD_ANNULUS_TEST_T')
+        .where({
+          WELL_ID: evaluationData.well_id,
+          WELLBORE_ID: evaluationData.wellbore_id,
+          SCENARIO_ID: evaluationData.scenario_id,
+          BARRIER_DIAGRAM_ID: evaluationData.barrier_diagram_id,
+          ANNULUS_ELEMENT_ID: evaluationData.annulus_element_id,
+        })
+        .execute();
+
+      this.dataSource
+        .createQueryBuilder()
+        .insert()
+        .into('CD_ANNULUS_TEST_T')
+        .values({
+          WELL_ID: evaluationData.well_id,
+          WELLBORE_ID: evaluationData.wellbore_id,
+          SCENARIO_ID: evaluationData.scenario_id,
+          BARRIER_DIAGRAM_ID: evaluationData.barrier_diagram_id,
+          ANNULUS_ELEMENT_ID: evaluationData.annulus_element_id,
+          PRESSURE: evaluationData.MAWOP,
+          TEST_TYPE: 'MAWOP',
+          LOCATION: evaluationData.mawop_point,
+          LAST_TEST_DATE: new Date(),
+          CREATE_USER: evaluationData.create_user,
+          ANNULUS_TEST_ID: StringUtils.makeId(5)
+        })
+        .execute();
+
+      this.dataSource
+        .createQueryBuilder()
+        .insert()
+        .into('CD_ANNULUS_TEST_T')
+        .values({
+          WELL_ID: evaluationData.well_id,
+          WELLBORE_ID: evaluationData.wellbore_id,
+          SCENARIO_ID: evaluationData.scenario_id,
+          BARRIER_DIAGRAM_ID: evaluationData.barrier_diagram_id,
+          ANNULUS_ELEMENT_ID: evaluationData.annulus_element_id,
+          PRESSURE: evaluationData.MAWOP,
+          TEST_TYPE: 'MOP',
+          LOCATION: evaluationData.mawop_point,
+          LAST_TEST_DATE: new Date(),
+          CREATE_USER: evaluationData.create_user,
+          ANNULUS_TEST_ID: StringUtils.makeId(5)
+        })
+        .execute();
+
+      this.dataSource
+        .createQueryBuilder()
+        .insert()
+        .into('CD_ANNULUS_TEST_T')
+        .values({
+          WELL_ID: evaluationData.well_id,
+          WELLBORE_ID: evaluationData.wellbore_id,
+          SCENARIO_ID: evaluationData.scenario_id,
+          BARRIER_DIAGRAM_ID: evaluationData.barrier_diagram_id,
+          ANNULUS_ELEMENT_ID: evaluationData.annulus_element_id,
+          PRESSURE: evaluationData.MAASP,
+          TEST_TYPE: 'MAASP',
+          LOCATION: evaluationData.maasp_point,
+          LAST_TEST_DATE: new Date(),
+          CREATE_USER: evaluationData.create_user,
+          ANNULUS_TEST_ID: StringUtils.makeId(5)
+        })
+        .execute();
     }
 
     return true;

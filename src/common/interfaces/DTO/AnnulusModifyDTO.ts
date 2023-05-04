@@ -1,6 +1,9 @@
 export interface AnnulusModifyDTO {
-  barrier_diagram_id: string;
-  pressure: number;
-  annulus: string;
   density: number;
+    name: string;
+    pressure: number;
+    scenario_id:string;
+    wellbore_id:string;
+    well_id:string;
+    schematic_date:Date;
 }
