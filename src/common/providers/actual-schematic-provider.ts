@@ -99,6 +99,8 @@ export class ActualSchematicProvider extends SchematicProvider {
       Station: await this.GetSurveyStations(body),
     };
 
+    wellSchematic.DerratingData = await this.GetDerratingData(body);
+
     wellSchematic.Catalogs = {
       Catalog: await this.schematicHelper.getCatalogs(), //TODO: This must be migrated to another call. For compatibility purposes we will fetch them here
     };
@@ -1415,7 +1417,7 @@ export class ActualSchematicProvider extends SchematicProvider {
           stageName: stage.job_type,
           CasingTest: stage.casing_test_press,
           CasingTestDuration: stage.casing_test_duration,
-          CasingTestComment: stage.test_comments, //TODO: GET TEST COMMENTS
+          CasingTestComment: stage.test_comments,
           DateReport: stage.date_report,
           PlugType: stage.plug_type,
           LinerNegTestTool: stage.is_liner_neg_test_tool,
@@ -1994,5 +1996,23 @@ export class ActualSchematicProvider extends SchematicProvider {
     });
 
     return logs;
+  }
+
+  /**
+   * Returns the derrating data for a given wellbore
+   * @param body 
+   */
+  async GetDerratingData(body: WellSchematicQueryDTO){
+    const derratingData = this.dbConnection.createQueryBuilder()
+    .from('CD_PRESSURE_SURVEY', "CPS")
+    .innerJoin("DM_REPORT_JOURNAL","DRJ", "CPS.report_journal_id = DRJ.report_journal_id")
+    .innerJoin("PL_FINAL_LOAD_SIMM","PFLS", "DRJ.pressure_survey_id = PFLS.pressure_survey_id")
+    .where("CPS.well_id = :well_id", {well_id: body.well_id})
+    .andWhere("CPS.wellbore_id = :wellbore_id", {wellbore_id: body.wellbore_id})
+    .andWhere("DRJ.date_report <= :date_report", {date_report: body.schematic_date})
+    .select("PFLS.*")
+    .getRawManyNormalized();
+
+    return derratingData;
   }
 }

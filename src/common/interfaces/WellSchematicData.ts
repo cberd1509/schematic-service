@@ -502,6 +502,25 @@ export type WellSchematic = {
   WellborePPGradient?: WellboreGradient[];
   WellboreTGradient?: WellboreGradient[];
   Wellhead?: Wellhead;
+  DerratingData?: DerratingData[];
+};
+
+export type DerratingData = {
+  pressure_survey_id: string;
+  trapped_volume_id: string;
+  final_load_simm_id: string;
+  assembly_name: string;
+  sequence_no: number;
+  casing_od: number;
+  top_interval: number;
+  base_interval: number;
+  wear: number;
+  ovality: number;
+  nom_burst_pressure: number;
+  nom_collapse_pressure: number;
+  calc_burst_pressure: number;
+  calc_collapse_pressure: number;
+  comments: string;
 };
 
 export type Wellbore = {
