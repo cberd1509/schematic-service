@@ -426,7 +426,7 @@ export class AnalysisDataService {
           SCENARIO_ID: evaluationData.scenario_id,
           BARRIER_DIAGRAM_ID: evaluationData.barrier_diagram_id,
           ANNULUS_ELEMENT_ID: evaluationData.annulus_element_id,
-          PRESSURE: evaluationData.MAWOP,
+          PRESSURE: evaluationData.MOP,
           TEST_TYPE: 'MOP',
           LOCATION: evaluationData.mawop_point,
           LAST_TEST_DATE: new Date(),
