@@ -14,8 +14,8 @@ export interface BarrierElementData{
     include_seals?:boolean;
     cement_job_id?:string;
     cement_stage_id?:string;
-    top_depth?:string;
-    base_depth?:string;
+    top_depth?:number;
+    base_depth?:number;
     wellbore_formation_id?:string;
     completion_id?:string;
     completion_fluid_id?:string;

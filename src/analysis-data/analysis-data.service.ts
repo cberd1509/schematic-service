@@ -200,6 +200,8 @@ export class AnalysisDataService {
           assembly_comp_id: barrier.elementType === 'CASING' ? lastId : null,
           component_wearing: 0,
           component_ovality: 0,
+          top_depth: barrier.top,
+          base_depth: barrier.base,
         };
 
         const insertObject = {};
@@ -287,7 +289,8 @@ export class AnalysisDataService {
           .createQueryBuilder()
           .insert()
           .into('CD_BARRIER_ENVELOPE_TEST_AUDIT')
-          .values(envTestData);
+          .values(envTestData)
+          .execute();
       } catch (ex) {
         this.logger.error(
           'An error ocurred while inserting audit info for CD BARRIER ENV TEST',

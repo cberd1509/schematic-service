@@ -80,6 +80,8 @@ export class SchematicHelper {
         'CBEL.barrier_envelope_id',
         'CBEL.barrier_diagram_id',
         'CBEL.barrier_element_id',
+        'CBEL.top_depth',
+        'CBEL.base_depth',
       ])
       .andWhere('CBD.diagram_date = :diagram_date', {
         diagram_date: body.schematic_date,

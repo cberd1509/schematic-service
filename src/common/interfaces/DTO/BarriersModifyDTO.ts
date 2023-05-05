@@ -10,4 +10,6 @@ export interface BarrierModifyData {
   barrier: string;
   elementType: string;
   eventRefId: string;
+  top?: number;
+  base?: number;
 }
