@@ -25,6 +25,7 @@ import {
   CementStage,
   Assembly,
   Perforation,
+  DerratingData,
   Fluid,
   Log,
 } from '../interfaces/WellSchematicData';
@@ -1144,11 +1145,6 @@ export class ActualSchematicProvider extends SchematicProvider {
       });
     }
 
-    console.log(
-      rawCasingStringsQuery.getQueryAndParameters(),
-      rawCasingStringsQuery.getSql(),
-    );
-
     const rawCasingStrings =
       await rawCasingStringsQuery.getRawManyNormalized<any>();
 
@@ -2000,18 +1996,33 @@ export class ActualSchematicProvider extends SchematicProvider {
 
   /**
    * Returns the derrating data for a given wellbore
-   * @param body 
+   * @param body
    */
-  async GetDerratingData(body: WellSchematicQueryDTO){
-    const derratingData = this.dbConnection.createQueryBuilder()
-    .from('CD_PRESSURE_SURVEY', "CPS")
-    .innerJoin("DM_REPORT_JOURNAL","DRJ", "CPS.report_journal_id = DRJ.report_journal_id")
-    .innerJoin("PL_FINAL_LOAD_SIMM","PFLS", "DRJ.pressure_survey_id = PFLS.pressure_survey_id")
-    .where("CPS.well_id = :well_id", {well_id: body.well_id})
-    .andWhere("CPS.wellbore_id = :wellbore_id", {wellbore_id: body.wellbore_id})
-    .andWhere("DRJ.date_report <= :date_report", {date_report: body.schematic_date})
-    .select("PFLS.*")
-    .getRawManyNormalized();
+  async GetDerratingData(body: WellSchematicQueryDTO) {
+    const derratingData = await this.dbConnection
+      .createQueryBuilder()
+      .from('CD_PRESSURE_SURVEY', 'CPS')
+      .innerJoin(
+        'DM_REPORT_JOURNAL',
+        'DRJ',
+        'CPS.report_journal_id = DRJ.report_journal_id',
+      )
+      .innerJoin(
+        'PL_FINAL_LOAD_SIMM',
+        'PFLS',
+        'CPS.PRESSURE_SURVEY_ID = PFLS.PRESSURE_SURVEY_ID',
+      )
+      .andWhere('CPS.WELL_ID = :WELL_ID', { WELL_ID: body.well_id })
+      .andWhere('CPS.wellbore_id = :wellbore_id', {
+        wellbore_id: body.wellbore_id,
+      })
+      .andWhere('DRJ.date_report <= :date_report', {
+        date_report: body.schematic_date,
+      })
+      .select('PFLS.*')
+      .orderBy('DRJ.date_report', 'ASC')
+      .orderBy('PFLS.sequence_no', 'ASC')
+      .getRawManyNormalized<DerratingData>();
 
     return derratingData;
   }
