@@ -1422,8 +1422,9 @@ export class ActualSchematicProvider extends SchematicProvider {
           Barrier: barriers.map((barrier) => {
             return {
               barrier_id: barrier.barrier_name,
-              from: stage.md_top,
-              to: stage.md_base,
+              from: barrier.top_depth ? Number((<number>barrier.top_depth).toFixed(1)) : stage.md_top,
+              to: barrier.base_depth ? Number((<number>barrier.base_depth).toFixed(1)) : stage.md_base,
+              is_combined: barrier.top_depth && barrier.base_depth ? true : false,
             };
           }),
           barrier_id: barriers.map((barrier) => barrier.barrier_name).join(','),
