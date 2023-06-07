@@ -1195,8 +1195,12 @@ export class ActualSchematicProvider extends SchematicProvider {
         Barrier: barriers.map((barrier) => {
           return {
             barrier_id: barrier.barrier_name,
-            from: barrier.top_depth ? Number((<number>barrier.top_depth).toFixed(1)) : casing.md_assembly_top,
-            to: barrier.base_depth ? Number((<number>barrier.base_depth).toFixed(1)) : casing.md_assembly_base,
+            from: barrier.top_depth
+              ? Number((<number>barrier.top_depth).toFixed(1))
+              : casing.md_assembly_top,
+            to: barrier.base_depth
+              ? Number((<number>barrier.base_depth).toFixed(1))
+              : casing.md_assembly_base,
             is_combined: barrier.top_depth && barrier.base_depth ? true : false,
           };
         }),
@@ -1422,9 +1426,14 @@ export class ActualSchematicProvider extends SchematicProvider {
           Barrier: barriers.map((barrier) => {
             return {
               barrier_id: barrier.barrier_name,
-              from: barrier.top_depth ? Number((<number>barrier.top_depth).toFixed(1)) : stage.md_top,
-              to: barrier.base_depth ? Number((<number>barrier.base_depth).toFixed(1)) : stage.md_base,
-              is_combined: barrier.top_depth && barrier.base_depth ? true : false,
+              from: barrier.top_depth
+                ? Number((<number>barrier.top_depth).toFixed(1))
+                : stage.md_top,
+              to: barrier.base_depth
+                ? Number((<number>barrier.base_depth).toFixed(1))
+                : stage.md_base,
+              is_combined:
+                barrier.top_depth && barrier.base_depth ? true : false,
             };
           }),
           barrier_id: barriers.map((barrier) => barrier.barrier_name).join(','),
@@ -1623,8 +1632,8 @@ export class ActualSchematicProvider extends SchematicProvider {
           BurstPressure: component.pressure_burst,
           ItemDescription: component.catalog_key_desc,
           barrier_id: barriers.map((barrier) => barrier.barrier_name).join(','),
-          barrier_from: barriers.length > 0 ? component.md_top+0.01 : null,
-          barrier_to: barriers.length > 0 ? component.md_base-0.01 : null,
+          barrier_from: barriers.length > 0 ? component.md_top + 0.01 : null,
+          barrier_to: barriers.length > 0 ? component.md_base - 0.01 : null,
           is_barrier_closed_at_top: index == 0,
           is_barrier_closed_at_bottom:
             index == rawAssemblyComponents.length - 1,
@@ -1770,6 +1779,9 @@ export class ActualSchematicProvider extends SchematicProvider {
 
         fluidRawData.push(...annulusFluids);
       } else {
+        const survey = await this.GetSurveyStations(queryData);
+        const wellDepth = survey[survey.length - 1].Md;
+
         const singleFluid: any = {
           well_id: drillingFluid['well_id'],
           wellbore_id: drillingFluid['wellbore_id'],
@@ -1779,7 +1791,7 @@ export class ActualSchematicProvider extends SchematicProvider {
           event_id: drillingFluid['event_id'],
           type: 'DRILLING',
           fluid_id: drillingFluid['fluid_id'],
-          md_base: drillingFluid['md_mud_sample'],
+          md_base: wellDepth,
         };
         fluidRawData.push(singleFluid);
       }
@@ -1807,13 +1819,14 @@ export class ActualSchematicProvider extends SchematicProvider {
         );
 
         const color = 'rgb(212, 160, 49)';
+        const startDepth =
+          fluidItem.type == 'COMPLETION'
+            ? Number(fluidItem.md_top)
+            : Number(-depths.DatumElevation) + Number(depths.AirGap);
 
         const fluidDataItem: Fluid = {
           ref_id: refId,
-          StartDepth:
-            fluidItem.type == 'COMPLETION'
-              ? Number(fluidItem.md_top)
-              : Number(-depths.DatumElevation) - Number(depths.AirGap),
+          StartDepth: startDepth,
           EndDepth: fluidItem.md_base,
           RealEndDepth: fluidItem.md_base,
           InsideOpenHole: false,
@@ -1831,7 +1844,7 @@ export class ActualSchematicProvider extends SchematicProvider {
               from:
                 fluidItem.type == 'COMPLETION'
                   ? fluidItem.md_top
-                  : -depths.DatumElevation + depths.AirGap,
+                  : -depths.DatumElevation,
               to: fluidItem.md_base,
             };
           }),
