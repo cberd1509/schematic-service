@@ -1026,7 +1026,7 @@ export class ActualSchematicProvider extends SchematicProvider {
       for (const holeSection of rawHoleSections) {
         const refId = `CdHoleSectGroupT/${queryData.well_id}+${wellbore.wellbore_id}+${holeSection.hole_sect_group_id}`;
         const integrityTests = await this.GetHoleSectionsIntegrityTests(
-          queryData,
+          wellbore,
           holeSection.hole_sect_group_id,
         );
 
@@ -1067,7 +1067,7 @@ export class ActualSchematicProvider extends SchematicProvider {
    * @returns
    */
   async GetHoleSectionsIntegrityTests(
-    queryData: WellSchematicQueryDTO,
+    wellbore: WellboreData,
     hole_sect_group_id: string,
   ): Promise<IntegrityTest[]> {
     try {
@@ -1075,17 +1075,17 @@ export class ActualSchematicProvider extends SchematicProvider {
         'Fetching integrity tests for hole section group ' +
           hole_sect_group_id +
           ' in wellbore ' +
-          queryData.wellbore_id +
+          wellbore.wellbore_id +
           ' in well ' +
-          queryData.well_id +
+          wellbore.well_id +
           '.',
       );
       return this.dbConnection
         .createQueryBuilder()
         .from('DM_WELLBORE_INTEG', 'WI')
-        .where('WI.WELL_ID = :wellid', { wellid: queryData.well_id })
+        .where('WI.WELL_ID = :wellid', { wellid: wellbore.well_id })
         .andWhere('WI.WELLBORE_ID = :wellboreid', {
-          wellboreid: queryData.wellbore_id,
+          wellboreid: wellbore.wellbore_id,
         })
         .andWhere('WI.HOLE_SECT_GROUP_ID = :holesectgroupid', {
           holesectgroupid: hole_sect_group_id,
@@ -1608,8 +1608,7 @@ export class ActualSchematicProvider extends SchematicProvider {
         //If CompType is TH and SectType is WBEQP and Length is less than 1, then Length is 1
         const actualLength = component['length'];
         if (
-          component.comp_type_code === 'TH' &&
-          component.sect_type_code === 'WBEQP' &&
+          ['TH', 'FLTH'].includes(component.comp_type_code) &&
           component['length'] < 1
         ) {
           component['length'] = 1;
