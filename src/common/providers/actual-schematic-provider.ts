@@ -574,6 +574,11 @@ export class ActualSchematicProvider extends SchematicProvider {
           'LITH',
           'LITH.OW_LITHOLOGY_ID = WBF.LITHOLOGY_ID',
         )
+        .leftJoin(
+          'CD_STRAT_UNIT',
+          'CSU',
+          'WBF.STRAT_UNIT_ID = CSU.STRAT_UNIT_ID',
+        )
         .select([
           'WBF.*',
           'FP.tvd_base as actual_tvd_base',
@@ -582,6 +587,7 @@ export class ActualSchematicProvider extends SchematicProvider {
           'FP.md_base as actual_md_base',
           'FP.phase as actual_phase',
           'LITH.LITHOLOGY_NAME',
+          'CSU.STRAT_UNIT_NAME',
         ])
         .where(
           'SFL.WELL_ID = :wellid AND SFL.WELLBORE_ID = :wellboreId AND SFL.SCENARIO_ID=:scenarioId',
@@ -610,7 +616,8 @@ export class ActualSchematicProvider extends SchematicProvider {
           Base: formation.actual_md_base,
           TopTVD: formation.actual_tvd_top,
           BaseTVD: formation.actual_tvd_base,
-          Label: formation.formation_name,
+          Label: formation.strat_unit_name,
+          StratUnitName: formation.strat_unit_name,
           comments: formation.comments,
           phase: formation.actual_phase,
           description: formation.formation_name,
