@@ -79,6 +79,7 @@ export type AssemblyComponent = {
   ItemDescription?: string;
   Joints?: number;
   Length?: number;
+  ActualLength?: number;
   Manufacturer?: string;
   MaximunHydraulics?: number;
   Model?: string;
