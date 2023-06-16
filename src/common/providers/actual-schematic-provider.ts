@@ -1605,6 +1605,16 @@ export class ActualSchematicProvider extends SchematicProvider {
           component.md_base = Math.min(component.md_base, nextWellbore.ko_md);
         }
 
+        //If CompType is TH and SectType is WBEQP and Length is less than 1, then Length is 1
+        const actualLength = component['length'];
+        if (
+          component.comp_type_code === 'TH' &&
+          component.sect_type_code === 'WBEQP' &&
+          component['length'] < 1
+        ) {
+          component['length'] = 1;
+        }
+
         const assemblyComponent: AssemblyComponent = {
           ref_id: refId,
           SectType: component.sect_type_code,
@@ -1613,6 +1623,7 @@ export class ActualSchematicProvider extends SchematicProvider {
           StartMD: component.md_top,
           BottomMD: component.md_base,
           Length: component['length'],
+          ActualLength: actualLength,
           OD: component.od_body,
           ID: component.id_body,
           ComponentID: component.assembly_comp_id,
