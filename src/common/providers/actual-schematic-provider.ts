@@ -584,8 +584,8 @@ export class ActualSchematicProvider extends SchematicProvider {
           'LITH.LITHOLOGY_NAME',
         ])
         .where(
-          'SFL.WELL_ID = :wellid AND SFL.WELLBORE_ID = :wellboreId AND SFL.SCENARIO_ID=:scenarioId',
-          { wellid: well_id, wellboreId: wellbore_id, scenarioId: scenario_id },
+          'SFL.WELL_ID = :wellid AND SFL.WELLBORE_ID = :wellboreId AND SFL.SCENARIO_ID=:scenarioId AND IS_LOG=:isLog',
+          { wellid: well_id, wellboreId: wellbore_id, scenarioId: scenario_id , isLog: 'Y'},
         )
         .orderBy('prognosed_md', 'ASC');
 
