@@ -591,7 +591,7 @@ export class ActualSchematicProvider extends SchematicProvider {
         ])
         .where(
           'SFL.WELL_ID = :wellid AND SFL.WELLBORE_ID = :wellboreId AND SFL.SCENARIO_ID=:scenarioId AND IS_LOG=:isLog',
-          { wellid: well_id, wellboreId: wellbore_id, scenarioId: scenario_id , isLog: 'Y'},
+          { wellid: well_id, wellboreId: wellbore_id, scenarioId: scenario_id },
         )
         .orderBy('prognosed_md', 'ASC');
 
