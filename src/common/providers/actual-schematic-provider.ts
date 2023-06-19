@@ -574,6 +574,11 @@ export class ActualSchematicProvider extends SchematicProvider {
           'LITH',
           'LITH.OW_LITHOLOGY_ID = WBF.LITHOLOGY_ID',
         )
+        .leftJoin(
+          'CD_STRAT_UNIT',
+          'CSU',
+          'WBF.STRAT_UNIT_ID = CSU.STRAT_UNIT_ID',
+        )
         .select([
           'WBF.*',
           'FP.tvd_base as actual_tvd_base',
@@ -582,6 +587,7 @@ export class ActualSchematicProvider extends SchematicProvider {
           'FP.md_base as actual_md_base',
           'FP.phase as actual_phase',
           'LITH.LITHOLOGY_NAME',
+          'CSU.STRAT_UNIT_NAME',
         ])
         .where(
           'SFL.WELL_ID = :wellid AND SFL.WELLBORE_ID = :wellboreId AND SFL.SCENARIO_ID=:scenarioId AND IS_LOG=:isLog',
@@ -610,7 +616,8 @@ export class ActualSchematicProvider extends SchematicProvider {
           Base: formation.actual_md_base,
           TopTVD: formation.actual_tvd_top,
           BaseTVD: formation.actual_tvd_base,
-          Label: formation.formation_name,
+          Label: formation.strat_unit_name,
+          StratUnitName: formation.strat_unit_name,
           comments: formation.comments,
           phase: formation.actual_phase,
           description: formation.formation_name,
@@ -1026,7 +1033,7 @@ export class ActualSchematicProvider extends SchematicProvider {
       for (const holeSection of rawHoleSections) {
         const refId = `CdHoleSectGroupT/${queryData.well_id}+${wellbore.wellbore_id}+${holeSection.hole_sect_group_id}`;
         const integrityTests = await this.GetHoleSectionsIntegrityTests(
-          queryData,
+          wellbore,
           holeSection.hole_sect_group_id,
         );
 
@@ -1067,7 +1074,7 @@ export class ActualSchematicProvider extends SchematicProvider {
    * @returns
    */
   async GetHoleSectionsIntegrityTests(
-    queryData: WellSchematicQueryDTO,
+    wellbore: WellboreData,
     hole_sect_group_id: string,
   ): Promise<IntegrityTest[]> {
     try {
@@ -1075,17 +1082,17 @@ export class ActualSchematicProvider extends SchematicProvider {
         'Fetching integrity tests for hole section group ' +
           hole_sect_group_id +
           ' in wellbore ' +
-          queryData.wellbore_id +
+          wellbore.wellbore_id +
           ' in well ' +
-          queryData.well_id +
+          wellbore.well_id +
           '.',
       );
       return this.dbConnection
         .createQueryBuilder()
         .from('DM_WELLBORE_INTEG', 'WI')
-        .where('WI.WELL_ID = :wellid', { wellid: queryData.well_id })
+        .where('WI.WELL_ID = :wellid', { wellid: wellbore.well_id })
         .andWhere('WI.WELLBORE_ID = :wellboreid', {
-          wellboreid: queryData.wellbore_id,
+          wellboreid: wellbore.wellbore_id,
         })
         .andWhere('WI.HOLE_SECT_GROUP_ID = :holesectgroupid', {
           holesectgroupid: hole_sect_group_id,
@@ -1608,8 +1615,7 @@ export class ActualSchematicProvider extends SchematicProvider {
         //If CompType is TH and SectType is WBEQP and Length is less than 1, then Length is 1
         const actualLength = component['length'];
         if (
-          component.comp_type_code === 'TH' &&
-          component.sect_type_code === 'WBEQP' &&
+          ['TH', 'FLTH'].includes(component.comp_type_code) &&
           component['length'] < 1
         ) {
           component['length'] = 1;

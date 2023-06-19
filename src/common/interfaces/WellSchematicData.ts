@@ -374,6 +374,7 @@ export type LithologyFormation = {
   Base?: number;
   BaseTVD?: number;
   Label?: string;
+  StratUnitName?: string;
   Lithology?: string;
   Top?: number;
   TopTVD?: number;
