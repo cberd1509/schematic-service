@@ -1619,7 +1619,7 @@ export class ActualSchematicProvider extends SchematicProvider {
         //If CompType is TH and SectType is WBEQP and Length is less than 1, then Length is 1
         const actualLength = component['length'];
         if (
-          ['TH', 'FLTH'].includes(component.comp_type_code) &&
+          ['TH', 'FLTH', 'POTH'].includes(component.comp_type_code) &&
           component['length'] < 1
         ) {
           component['length'] = 1;
