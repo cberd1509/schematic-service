@@ -616,9 +616,9 @@ export class ActualSchematicProvider extends SchematicProvider {
 
         lithologyData.push({
           Lithology: formation.lithology_name || formation.lithology_id,
-          Top: i === 0 ? -referenceDepths.DatumElevation : formation.actual_md_top,
+          Top: i === 0 ? -referenceDepths.DatumElevation+referenceDepths.AirGap: formation.actual_md_top,
           Base: formation.actual_md_base,
-          TopTVD: i === 0 ? -referenceDepths.DatumElevation : formation.actual_tvd_top,
+          TopTVD: i === 0 ? -referenceDepths.DatumElevation+referenceDepths.AirGap : formation.actual_tvd_top,
           BaseTVD: formation.actual_tvd_base,
           Label: formation.strat_unit_name,
           StratUnitName: formation.strat_unit_name,
