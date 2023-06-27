@@ -612,13 +612,13 @@ export class ActualSchematicProvider extends SchematicProvider {
           refId,
         );
 
-        //if it is the first formation, top will always be the air gap of reference depths
+        //if it is the first formation, top will always be the Datum
 
         lithologyData.push({
           Lithology: formation.lithology_name || formation.lithology_id,
-          Top: i === 0 ? referenceDepths.AirGap : formation.actual_md_top,
+          Top: i === 0 ? -referenceDepths.DatumElevation : formation.actual_md_top,
           Base: formation.actual_md_base,
-          TopTVD: i === 0 ? referenceDepths.AirGap : formation.actual_tvd_top,
+          TopTVD: i === 0 ? -referenceDepths.DatumElevation : formation.actual_tvd_top,
           BaseTVD: formation.actual_tvd_base,
           Label: formation.strat_unit_name,
           StratUnitName: formation.strat_unit_name,
