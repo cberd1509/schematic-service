@@ -1363,9 +1363,13 @@ export class ActualSchematicProvider extends SchematicProvider {
         .andWhere('CCJ.WELLBORE_ID = :wellboreid', {
           wellboreid: wellbore.wellbore_id,
         })
-        .andWhere('CCJ.ASSEMBLY_ID IN (:...assemblyids)', {
-          assemblyids: activeAssembliesIds,
-        })
+        .andWhere(
+          new Brackets((qb) => {
+            qb.where('CCJ.ASSEMBLY_ID IN (:...assemblyids)', {
+              assemblyids: activeAssembliesIds,
+            }).orWhere('CCJ.ASSEMBLY_ID IS NULL');
+          }),
+        )
         .andWhere('CCJ.JOB_START_DATE <= :date', {
           date: queryData.schematic_date,
         })
@@ -1408,8 +1412,8 @@ export class ActualSchematicProvider extends SchematicProvider {
           (casing) => casing.AssemblyID === stage.assembly_id,
         );
 
-        stage.AssemblyName = casing.name;
-        stage.AssemblyOd = casing.assemblySize;
+        stage.AssemblyName = casing?.name;
+        stage.AssemblyOd = casing?.assemblySize;
 
         if (nextWellbore) {
           stage.md_base = Math.min(stage.md_base, nextWellbore.ko_md);
