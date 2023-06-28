@@ -586,6 +586,7 @@ export class ActualSchematicProvider extends SchematicProvider {
           'FP.md_top as actual_md_top',
           'FP.md_base as actual_md_base',
           'FP.phase as actual_phase',
+          'FP.is_log as is_log',
           'LITH.LITHOLOGY_NAME',
           'CSU.STRAT_UNIT_NAME',
         ])
@@ -598,8 +599,17 @@ export class ActualSchematicProvider extends SchematicProvider {
       const rawLithologyData = await lithologyQuery.getRawManyNormalized();
       const referenceDepths = await this.GetReferenceDepths(queryData);
 
-
       const lithologyData: LithologyFormation[] = [];
+
+      //For each of the formations, takes the first one where is_log='Y', otherwise takes the first ocurrence of the others. Based on the wellbore_formation_id
+      const uniqueLithologyMap = new Map<string, any>();
+      for (const formation of rawLithologyData) {
+        if (formation.is_log === 'Y') {
+          uniqueLithologyMap.set(formation.wellbore_formation_id, formation);
+        } else if (!uniqueLithologyMap.has(formation.wellbore_formation_id)) {
+          uniqueLithologyMap.set(formation.wellbore_formation_id, formation);
+        }
+      }
 
       for (let i = 0; i < rawLithologyData.length; i++) {
         const formation = rawLithologyData[i];
@@ -616,9 +626,15 @@ export class ActualSchematicProvider extends SchematicProvider {
 
         lithologyData.push({
           Lithology: formation.lithology_name || formation.lithology_id,
-          Top: i === 0 ? -referenceDepths.DatumElevation+referenceDepths.AirGap: formation.actual_md_top,
+          Top:
+            i === 0
+              ? -referenceDepths.DatumElevation + referenceDepths.AirGap
+              : formation.actual_md_top,
           Base: formation.actual_md_base,
-          TopTVD: i === 0 ? -referenceDepths.DatumElevation+referenceDepths.AirGap : formation.actual_tvd_top,
+          TopTVD:
+            i === 0
+              ? -referenceDepths.DatumElevation + referenceDepths.AirGap
+              : formation.actual_tvd_top,
           BaseTVD: formation.actual_tvd_base,
           Label: formation.strat_unit_name,
           StratUnitName: formation.strat_unit_name,
