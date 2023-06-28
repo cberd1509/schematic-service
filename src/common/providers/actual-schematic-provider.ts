@@ -596,7 +596,7 @@ export class ActualSchematicProvider extends SchematicProvider {
         )
         .orderBy('prognosed_md', 'ASC');
 
-      const rawLithologyData = await lithologyQuery.getRawManyNormalized();
+      let rawLithologyData = await lithologyQuery.getRawManyNormalized();
       const referenceDepths = await this.GetReferenceDepths(queryData);
 
       const lithologyData: LithologyFormation[] = [];
@@ -610,6 +610,8 @@ export class ActualSchematicProvider extends SchematicProvider {
           uniqueLithologyMap.set(formation.wellbore_formation_id, formation);
         }
       }
+
+        rawLithologyData = Array.from(uniqueLithologyMap.values());
 
       for (let i = 0; i < rawLithologyData.length; i++) {
         const formation = rawLithologyData[i];
