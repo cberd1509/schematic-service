@@ -172,6 +172,37 @@ export class ActualSchematicProvider extends SchematicProvider {
       Fluid: await this.GetFluids(body, wellSchematic),
     };
 
+    //Correct survey by projecting the last point to the well TD if it finishes 600 ft before the latest hole section MD
+    const lastHoleSection =
+      wellSchematic.HoleSections.HoleSection[
+        wellSchematic.HoleSections.HoleSection.length - 1
+      ];
+    const lastSurveyStation =
+      wellSchematic.Survey.Station[wellSchematic.Survey.Station.length - 1];
+
+    if ((lastHoleSection.StartMD+lastHoleSection.Length)-lastSurveyStation.Md > 600)
+        {
+            const syntheticSurveyStationMd = lastHoleSection.StartMD+lastHoleSection.Length;
+            const lastSurveyStationIndex = wellSchematic.Survey.Station.length - 1;
+
+
+            const m = (wellSchematic.Survey.Station[lastSurveyStationIndex].Tvd - wellSchematic.Survey.Station[lastSurveyStationIndex-1].Tvd) / (wellSchematic.Survey.Station[lastSurveyStationIndex].Md - wellSchematic.Survey.Station[lastSurveyStationIndex-1].Md);
+            const b = (wellSchematic.Survey.Station[lastSurveyStationIndex].Tvd - m * wellSchematic.Survey.Station[lastSurveyStationIndex].Md);
+
+            const syntheticSurveyStationTvd = m * syntheticSurveyStationMd + b;
+
+            wellSchematic.Survey.Station.push({
+                Md: syntheticSurveyStationMd,
+                Inc: lastSurveyStation.Inc,
+                isProjected: true,
+                Tvd: syntheticSurveyStationTvd,
+                Azi: lastSurveyStation.Azi,
+                Ew: lastSurveyStation.Ew,
+                Ns: lastSurveyStation.Ns
+            })
+
+        }
+
     return wellSchematic;
   }
 
@@ -611,7 +642,7 @@ export class ActualSchematicProvider extends SchematicProvider {
         }
       }
 
-        rawLithologyData = Array.from(uniqueLithologyMap.values());
+      rawLithologyData = Array.from(uniqueLithologyMap.values());
 
       for (let i = 0; i < rawLithologyData.length; i++) {
         const formation = rawLithologyData[i];
@@ -959,6 +990,7 @@ export class ActualSchematicProvider extends SchematicProvider {
             Tvd: surveyStation.tvd,
             Ns: surveyStation.offset_north,
             Ew: surveyStation.offset_east,
+            isProjected: false,
           } as SurveyStation),
       );
     } catch (err) {

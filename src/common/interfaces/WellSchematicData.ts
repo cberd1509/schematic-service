@@ -460,6 +460,7 @@ export type SurveyStation = {
   Md?: number;
   Ns?: number;
   Tvd?: number;
+  isProjected: boolean;
 };
 
 export type Units = {
