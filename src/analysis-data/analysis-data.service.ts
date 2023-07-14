@@ -353,7 +353,7 @@ export class AnalysisDataService {
       )
     ).barrier_diagram_id;
 
-    this.dataSource
+    await this.dataSource
       .createQueryBuilder()
       .delete()
       .from('CD_ANNULUS_ELEMENT_T')
@@ -366,7 +366,7 @@ export class AnalysisDataService {
       .andWhere('name=:name', { name: body.name })
       .execute();
 
-    this.dataSource
+    await this.dataSource
       .createQueryBuilder()
       .insert()
       .into('CD_ANNULUS_ELEMENT_T')
@@ -387,7 +387,7 @@ export class AnalysisDataService {
 
   async setAnnulusEvaluation(body: AnnulusEvaluationDTO[]) {
     for (const evaluationData of body) {
-      this.dataSource
+      await this.dataSource
         .createQueryBuilder()
         .delete()
         .from('CD_ANNULUS_TEST_T')
@@ -400,7 +400,7 @@ export class AnalysisDataService {
         })
         .execute();
 
-      this.dataSource
+      await this.dataSource
         .createQueryBuilder()
         .insert()
         .into('CD_ANNULUS_TEST_T')
@@ -419,7 +419,7 @@ export class AnalysisDataService {
         })
         .execute();
 
-      this.dataSource
+      await this.dataSource
         .createQueryBuilder()
         .insert()
         .into('CD_ANNULUS_TEST_T')
@@ -438,7 +438,7 @@ export class AnalysisDataService {
         })
         .execute();
 
-      this.dataSource
+      await this.dataSource
         .createQueryBuilder()
         .insert()
         .into('CD_ANNULUS_TEST_T')
