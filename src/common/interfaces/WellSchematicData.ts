@@ -500,6 +500,7 @@ export type WellSchematic = {
   SidetrackCutoffs?: SidetrackCutoffs;
   Stimulations?: Stimulations;
   Survey?: Survey;
+  ActualSurvey?: Survey;
   Units?: Units;
   WellboreFPGradient?: WellboreGradient[];
   WellborePPGradient?: WellboreGradient[];

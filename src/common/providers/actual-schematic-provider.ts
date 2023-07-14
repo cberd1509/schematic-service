@@ -96,9 +96,15 @@ export class ActualSchematicProvider extends SchematicProvider {
       'PL_WELLBORE_TEMP_GRAD',
     );
 
+    //Schematic is returning errors when there's a survey. However it is neccessary to make calculations.
+    //Therefore we will return an empty survey and store the real survey in another field.
     wellSchematic.Survey = {
-      Station: await this.GetSurveyStations(body),
+      Station: [],
     };
+
+    wellSchematic.ActualSurvey = {
+        Station: await this.GetSurveyStations(body)
+    }
 
     wellSchematic.DerratingData = await this.GetDerratingData(body);
 
@@ -171,37 +177,6 @@ export class ActualSchematicProvider extends SchematicProvider {
     wellSchematic.Fluids = {
       Fluid: await this.GetFluids(body, wellSchematic),
     };
-
-    //Correct survey by projecting the last point to the well TD if it finishes 600 ft before the latest hole section MD
-    const lastHoleSection =
-      wellSchematic.HoleSections.HoleSection[
-        wellSchematic.HoleSections.HoleSection.length - 1
-      ];
-    const lastSurveyStation =
-      wellSchematic.Survey.Station[wellSchematic.Survey.Station.length - 1];
-
-    if ((lastHoleSection.StartMD+lastHoleSection.Length)-lastSurveyStation.Md > 600)
-        {
-            const syntheticSurveyStationMd = lastHoleSection.StartMD+lastHoleSection.Length;
-            const lastSurveyStationIndex = wellSchematic.Survey.Station.length - 1;
-
-
-            const m = (wellSchematic.Survey.Station[lastSurveyStationIndex].Tvd - wellSchematic.Survey.Station[lastSurveyStationIndex-1].Tvd) / (wellSchematic.Survey.Station[lastSurveyStationIndex].Md - wellSchematic.Survey.Station[lastSurveyStationIndex-1].Md);
-            const b = (wellSchematic.Survey.Station[lastSurveyStationIndex].Tvd - m * wellSchematic.Survey.Station[lastSurveyStationIndex].Md);
-
-            const syntheticSurveyStationTvd = m * syntheticSurveyStationMd + b;
-
-            wellSchematic.Survey.Station.push({
-                Md: syntheticSurveyStationMd,
-                Inc: lastSurveyStation.Inc,
-                isProjected: true,
-                Tvd: syntheticSurveyStationTvd,
-                Azi: lastSurveyStation.Azi,
-                Ew: lastSurveyStation.Ew,
-                Ns: lastSurveyStation.Ns
-            })
-
-        }
 
     return wellSchematic;
   }
