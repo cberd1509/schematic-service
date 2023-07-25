@@ -1842,6 +1842,8 @@ export class ActualSchematicProvider extends SchematicProvider {
           type: 'DRILLING',
           fluid_id: drillingFluid['fluid_id'],
           md_base: wellDepth,
+          fluid_top: drillingFluid['fluid_top'],
+          fluid_base: drillingFluid['fluid_base']
         };
         fluidRawData.push(singleFluid);
       }
@@ -1869,16 +1871,32 @@ export class ActualSchematicProvider extends SchematicProvider {
         );
 
         const color = 'rgb(212, 160, 49)';
-        const startDepth =
-          fluidItem.type == 'COMPLETION'
-            ? Number(fluidItem.md_top)
-            : Number(-depths.DatumElevation) + Number(depths.AirGap);
+        let startDepth = 0;
+        let endDepth = 0;
 
+        if(fluidItem.type === 'COMPLETION') {
+            startDepth = Number(fluidItem.md_top);
+            endDepth = Number(fluidItem.md_base);
+        } else {
+            if(fluidItem.fluid_top && fluidItem.fluid_base)
+            {
+                startDepth = Number(fluidItem.fluid_top);
+                endDepth = Number(fluidItem.fluid_base);
+            }
+            else {
+                
+            startDepth = Number(-depths.DatumElevation) + Number(depths.AirGap);
+            endDepth = Number(fluidItem.md_base);
+
+            }
+        }
+            
+        
         const fluidDataItem: Fluid = {
           ref_id: refId,
           StartDepth: startDepth,
-          EndDepth: fluidItem.md_base,
-          RealEndDepth: fluidItem.md_base,
+          EndDepth: endDepth,
+          RealEndDepth: endDepth,
           InsideOpenHole: false,
           InsideCasing: fluidItem.type !== 'COMPLETION',
           InsideTubing: false,
@@ -1891,11 +1909,8 @@ export class ActualSchematicProvider extends SchematicProvider {
           Barrier: barriers.map((barrier) => {
             return {
               barrier_id: barrier.barrier_name,
-              from:
-                fluidItem.type == 'COMPLETION'
-                  ? fluidItem.md_top
-                  : -depths.DatumElevation,
-              to: fluidItem.md_base,
+              from: startDepth,
+              to: endDepth,
             };
           }),
         };
@@ -1932,6 +1947,7 @@ export class ActualSchematicProvider extends SchematicProvider {
       .andWhere('CD_FLUID.check_date >= :check_date_min', {
         check_date_min: schematicStartDate,
       })
+      .innerJoin('PL_FLUID_EXT', 'PL_FLUID_EXT', 'PL_FLUID_EXT.fluid_id= CD_FLUID.fluid_id AND PL_FLUID_EXT.well_id = CD_FLUID.well_id AND PL_FLUID_EXT.wellbore_id = CD_FLUID.wellbore_id')
       .orderBy('CD_FLUID.check_date', 'DESC')
       .getRawOneNormalized();
 
