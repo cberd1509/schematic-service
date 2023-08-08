@@ -149,7 +149,7 @@ export class AnalysisDataService {
         })
         .getExists();
 
-      if (barrierElementExists) {
+      if ((barrierElementExists || barrier.forceDelete)  && !barrier.isComposite) {
         //Deletes element
         await this.dataSource
           .createQueryBuilder()

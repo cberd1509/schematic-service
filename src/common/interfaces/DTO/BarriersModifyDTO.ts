@@ -12,4 +12,6 @@ export interface BarrierModifyData {
   eventRefId: string;
   top?: number;
   base?: number;
+  forceDelete:boolean;
+  isComposite:boolean;
 }
