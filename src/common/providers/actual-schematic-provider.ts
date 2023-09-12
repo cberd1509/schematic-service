@@ -696,17 +696,17 @@ export class ActualSchematicProvider extends SchematicProvider {
           return {
             Offshore: datumInfo.is_offshore == 'Y',
             AirGap: Number(
-              (datumInfo.datum_elevation - datumInfo.water_depth).toFixed(1),
+              (datumInfo.datum_elevation - datumInfo.water_depth).toFixed(2),
             ),
-            WaterDepth: Number(datumInfo.water_depth.toFixed(1)),
+            WaterDepth: Number(datumInfo.water_depth.toFixed(2)),
             Mudline: Number(
-              (datumInfo.datum_elevation - datumInfo.water_depth).toFixed(1),
+              (datumInfo.datum_elevation - datumInfo.water_depth).toFixed(2),
             ),
             DatumElevation: datumInfo.datum_elevation
-              ? Number(datumInfo.datum_elevation.toFixed(1))
+              ? Number(datumInfo.datum_elevation.toFixed(2))
               : undefined,
             WellheadDepth: datumInfo.wellhead_depth
-              ? Number(datumInfo.wellhead_depth.toFixed(1))
+              ? Number(datumInfo.wellhead_depth.toFixed(2))
               : undefined,
             SystemDatum: 'Mean Sea Level',
           } as ReferenceDepths;
@@ -1659,8 +1659,8 @@ export class ActualSchematicProvider extends SchematicProvider {
           SectType: component.sect_type_code,
           CompType: component.comp_type_code,
           assemblyName: assembly.assembly_name,
-          StartMD: component.md_top,
-          BottomMD: component.md_base,
+          StartMD: Number(component.md_top.toFixed(1)),
+          BottomMD: Number(component.md_base.toFixed(1)),
           Length: component['length'],
           ActualLength: actualLength,
           OD: component.od_body,
